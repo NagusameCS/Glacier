@@ -272,19 +272,19 @@ function GlassPanel({
 }) {
   const intensityStyles = {
     light: {
-      bg: 'rgba(255, 255, 255, 0.05)',
-      blur: '12px',
-      border: 'rgba(255, 255, 255, 0.1)',
+      bg: 'rgba(255, 255, 255, 0.02)',
+      blur: '4px',
+      border: 'rgba(255, 255, 255, 0.08)',
     },
     normal: {
-      bg: 'rgba(255, 255, 255, 0.08)',
-      blur: '20px',
-      border: 'rgba(255, 255, 255, 0.15)',
+      bg: 'rgba(255, 255, 255, 0.03)',
+      blur: '6px',
+      border: 'rgba(255, 255, 255, 0.1)',
     },
     heavy: {
-      bg: 'rgba(255, 255, 255, 0.12)',
-      blur: '30px',
-      border: 'rgba(255, 255, 255, 0.2)',
+      bg: 'rgba(255, 255, 255, 0.05)',
+      blur: '8px',
+      border: 'rgba(255, 255, 255, 0.12)',
     },
   };
 
