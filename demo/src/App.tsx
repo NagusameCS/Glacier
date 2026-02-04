@@ -9,7 +9,7 @@ import {
 } from './components/LiquidComponents';
 
 // =============================================
-// GLOBAL GLASS CONTEXT - affects ALL glass on page
+// GLOBAL GLASS CONTEXT
 // =============================================
 interface GlassParams {
   refraction: number;
@@ -31,7 +31,7 @@ const GlassContext = createContext<{
 const useGlass = () => useContext(GlassContext);
 
 // =============================================
-// FAVICON ICON COMPONENT
+// FAVICON ICON
 // =============================================
 function GlacierIcon({ className = '' }: { className?: string }) {
   return (
@@ -73,263 +73,188 @@ function GlacierIcon({ className = '' }: { className?: string }) {
 }
 
 // =============================================
-// MINI WEBGL LIQUID GLASS FOR UI ELEMENTS
+// LIQUID GLASS CURSOR
 // =============================================
-function MiniLiquidGlass({ 
-  width, 
-  height, 
-  className = '',
-  style = {},
-}: { 
-  width: number;
-  height: number;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
+function LiquidCursor() {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [visible, setVisible] = useState(false);
   const { params } = useGlass();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const glRef = useRef<WebGL2RenderingContext | null>(null);
-  const programRef = useRef<WebGLProgram | null>(null);
-  const rafRef = useRef<number>(0);
-  const timeRef = useRef(0);
-
-  const vertexShader = `#version 300 es
-    in vec4 a_position;
-    out vec2 v_uv;
-    void main() {
-      v_uv = (a_position.xy + 1.0) * 0.5;
-      gl_Position = a_position;
-    }`;
-
-  const fragmentShader = `#version 300 es
-    precision highp float;
-    in vec2 v_uv;
-    out vec4 fragColor;
-    
-    uniform vec2 u_resolution;
-    uniform float u_time;
-    uniform float u_refraction;
-    uniform float u_dispersion;
-    uniform float u_blur;
-    uniform float u_fresnel;
-    uniform float u_glare;
-    uniform float u_roundness;
-    
-    float sdRoundedRect(vec2 p, vec2 b, float r) {
-      vec2 q = abs(p) - b + r;
-      return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-    }
-    
-    void main() {
-      vec2 uv = v_uv;
-      vec2 p = (uv - 0.5) * u_resolution;
-      vec2 size = u_resolution * 0.45;
-      float radius = min(size.x, size.y) * u_roundness;
-      
-      float sd = sdRoundedRect(p, size, radius);
-      
-      if (sd < 0.0) {
-        float depth = -sd / max(size.x, size.y);
-        depth = clamp(depth, 0.0, 1.0);
-        
-        // Base glass color with subtle gradient
-        vec3 baseColor = vec3(0.95, 0.97, 1.0);
-        
-        // Fresnel edge glow
-        float fresnelFactor = pow(1.0 - depth, 4.0) * u_fresnel;
-        
-        // Animated glare
-        float angle = atan(p.y, p.x) + u_time * 0.5;
-        float glareFactor = (0.5 + sin(angle * 2.0) * 0.5) * (1.0 - depth) * u_glare;
-        glareFactor = pow(glareFactor, 2.0);
-        
-        // Combine effects
-        vec3 color = baseColor;
-        color = mix(color, vec3(1.0), fresnelFactor * 0.6);
-        color = mix(color, vec3(1.0, 1.0, 0.98), glareFactor * 0.4);
-        
-        // Edge darkening
-        float edgeDark = smoothstep(0.0, 0.15, depth);
-        color *= mix(0.92, 1.0, edgeDark);
-        
-        // Chromatic aberration hint
-        float dispersionHint = u_dispersion * 0.01 * (1.0 - depth);
-        color.r += dispersionHint * 0.02;
-        color.b -= dispersionHint * 0.02;
-        
-        float alpha = smoothstep(0.0, 2.0, -sd);
-        fragColor = vec4(color, alpha * 0.9);
-      } else {
-        fragColor = vec4(0.0);
-      }
-      
-      // Smooth AA edge
-      float edgeBlend = smoothstep(1.5, -1.5, sd);
-      fragColor.a *= edgeBlend;
-    }`;
-
+  
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false });
-    if (!gl) return;
-    glRef.current = gl;
-
-    const createShader = (type: number, source: string) => {
-      const shader = gl.createShader(type);
-      if (!shader) return null;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
+    const handleMouseMove = (e: MouseEvent) => {
+      setPos({ x: e.clientX, y: e.clientY });
+      setVisible(true);
     };
-
-    const vs = createShader(gl.VERTEX_SHADER, vertexShader);
-    const fs = createShader(gl.FRAGMENT_SHADER, fragmentShader);
-    if (!vs || !fs) return;
-
-    const program = gl.createProgram();
-    if (!program) return;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error(gl.getProgramInfoLog(program));
-      return;
-    }
-    programRef.current = program;
-
-    const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-
-    const posLoc = gl.getAttribLocation(program, 'a_position');
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-
+    
+    const handleMouseLeave = () => setVisible(false);
+    const handleMouseEnter = () => setVisible(true);
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseleave', handleMouseLeave);
+    document.addEventListener('mouseenter', handleMouseEnter);
+    
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+      document.removeEventListener('mouseenter', handleMouseEnter);
     };
   }, []);
 
-  useEffect(() => {
-    const gl = glRef.current;
-    const program = programRef.current;
-    if (!gl || !program) return;
-
-    const render = () => {
-      timeRef.current += 0.016;
-      
-      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      
-      gl.useProgram(program);
-      
-      const setUniform = (name: string, value: number | number[]) => {
-        const loc = gl.getUniformLocation(program, name);
-        if (!loc) return;
-        if (Array.isArray(value)) gl.uniform2f(loc, value[0], value[1]);
-        else gl.uniform1f(loc, value);
-      };
-      
-      setUniform('u_resolution', [gl.canvas.width, gl.canvas.height]);
-      setUniform('u_time', timeRef.current);
-      setUniform('u_refraction', params.refraction);
-      setUniform('u_dispersion', params.dispersion);
-      setUniform('u_blur', params.blur);
-      setUniform('u_fresnel', params.fresnel);
-      setUniform('u_glare', params.glare);
-      setUniform('u_roundness', params.roundness);
-      
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      rafRef.current = requestAnimationFrame(render);
-    };
-    
-    rafRef.current = requestAnimationFrame(render);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [params]);
-
-  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  if (!visible) return null;
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={className}
-      width={width * dpr}
-      height={height * dpr}
-      style={{ width, height, ...style }}
-    />
+    <div
+      className="fixed pointer-events-none z-[9999] transition-transform duration-75"
+      style={{
+        left: pos.x - 16,
+        top: pos.y - 16,
+        width: 32,
+        height: 32,
+      }}
+    >
+      {/* Outer glow */}
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: `radial-gradient(circle, rgba(147, 51, 234, ${0.2 + params.glare * 0.2}) 0%, transparent 70%)`,
+          transform: 'scale(2)',
+        }}
+      />
+      {/* Glass cursor */}
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: `radial-gradient(circle at 30% 30%, 
+            rgba(255, 255, 255, ${0.9 + params.fresnel * 0.1}) 0%, 
+            rgba(255, 255, 255, ${0.4 + params.fresnel * 0.2}) 40%,
+            rgba(200, 220, 255, ${0.3 + params.fresnel * 0.1}) 100%)`,
+          boxShadow: `
+            0 0 ${4 + params.blur}px rgba(255, 255, 255, 0.5),
+            0 2px 8px rgba(0, 0, 0, 0.3),
+            inset 0 1px 2px rgba(255, 255, 255, 0.8),
+            inset 0 -1px 2px rgba(0, 0, 0, 0.1)
+          `,
+          border: '1px solid rgba(255, 255, 255, 0.4)',
+        }}
+      />
+      {/* Inner highlight */}
+      <div
+        className="absolute rounded-full"
+        style={{
+          top: '15%',
+          left: '20%',
+          width: '35%',
+          height: '25%',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.9) 0%, transparent 100%)',
+          borderRadius: '50%',
+        }}
+      />
+    </div>
   );
 }
 
 // =============================================
-// LIQUID GLASS PANEL - WebGL-based glass panels
+// CSS-BASED GLASS PANEL (no WebGL!)
 // =============================================
-function LiquidPanel({ 
+function GlassPanel({ 
   children, 
   className = '',
   padding = 'p-6',
+  animate = false,
 }: { 
   children: React.ReactNode;
   className?: string;
   padding?: string;
+  animate?: boolean;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
   const { params } = useGlass();
+  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
+  const panelRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
-    if (!panelRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      setSize({ width, height });
-    });
-    observer.observe(panelRef.current);
-    return () => observer.disconnect();
-  }, []);
+    if (!animate || !panelRef.current) return;
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = panelRef.current!.getBoundingClientRect();
+      setMousePos({
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top) / rect.height,
+      });
+    };
+    
+    const panel = panelRef.current;
+    panel.addEventListener('mousemove', handleMouseMove);
+    return () => panel.removeEventListener('mousemove', handleMouseMove);
+  }, [animate]);
+
+  // Dynamic glass effect based on global params
+  const bgOpacity = 0.08 + params.fresnel * 0.08;
+  const borderOpacity = 0.15 + params.fresnel * 0.15;
+  const blurAmount = 12 + params.blur;
 
   return (
-    <div ref={panelRef} className={`relative overflow-hidden rounded-3xl ${className}`}>
-      {/* WebGL Glass Background */}
-      {size.width > 0 && (
-        <div className="absolute inset-0">
-          <MiniLiquidGlass width={size.width} height={size.height} className="w-full h-full" />
-        </div>
-      )}
-      
-      {/* Frosted overlay for content readability */}
+    <div
+      ref={panelRef}
+      className={`relative overflow-hidden rounded-3xl ${className}`}
+      style={{
+        background: `linear-gradient(135deg, 
+          rgba(255, 255, 255, ${bgOpacity + 0.02}) 0%,
+          rgba(255, 255, 255, ${bgOpacity}) 50%,
+          rgba(200, 220, 255, ${bgOpacity * 0.8}) 100%)`,
+        backdropFilter: `blur(${blurAmount}px) saturate(${150 + params.fresnel * 50}%)`,
+        WebkitBackdropFilter: `blur(${blurAmount}px) saturate(${150 + params.fresnel * 50}%)`,
+        border: `1px solid rgba(255, 255, 255, ${borderOpacity})`,
+        boxShadow: `
+          inset 0 1px 1px rgba(255, 255, 255, ${0.2 + params.glare * 0.2}),
+          inset 0 -1px 1px rgba(0, 0, 0, 0.05),
+          0 8px 32px rgba(0, 0, 0, 0.12),
+          0 0 ${params.glare * 20}px rgba(147, 51, 234, ${params.glare * 0.1})
+        `,
+      }}
+    >
+      {/* Fresnel edge highlight */}
       <div 
-        className="absolute inset-0"
+        className="absolute inset-0 pointer-events-none rounded-3xl"
         style={{
-          background: `rgba(255, 255, 255, ${0.05 + params.blur * 0.01})`,
-          backdropFilter: `blur(${params.blur}px)`,
-          WebkitBackdropFilter: `blur(${params.blur}px)`,
+          background: `linear-gradient(135deg, 
+            rgba(255, 255, 255, ${params.fresnel * 0.15}) 0%, 
+            transparent 50%,
+            rgba(255, 255, 255, ${params.fresnel * 0.05}) 100%)`,
         }}
       />
       
-      {/* Content */}
+      {/* Moving glare */}
+      {animate && (
+        <div
+          className="absolute pointer-events-none transition-all duration-200 ease-out"
+          style={{
+            width: '50%',
+            height: '50%',
+            left: `${mousePos.x * 100}%`,
+            top: `${mousePos.y * 100}%`,
+            transform: 'translate(-50%, -50%)',
+            background: `radial-gradient(circle, rgba(255,255,255,${params.glare * 0.2}) 0%, transparent 70%)`,
+          }}
+        />
+      )}
+      
+      {/* Top edge shine */}
+      <div 
+        className="absolute inset-x-0 top-0 h-px pointer-events-none"
+        style={{ 
+          background: `linear-gradient(90deg, transparent, rgba(255,255,255,${0.3 + params.fresnel * 0.3}), transparent)` 
+        }}
+      />
+      
       <div className={`relative ${padding}`}>{children}</div>
     </div>
   );
 }
 
 // =============================================
-// ANIMATED TAB BAR WITH SLIDING GLASS
+// ANIMATED TAB BAR WITH CSS GLASS
 // =============================================
-function LiquidTabs({ 
+function GlassTabs({ 
   tabs, 
   activeTab, 
   onChange 
@@ -338,6 +263,7 @@ function LiquidTabs({
   activeTab: string;
   onChange: (id: string) => void;
 }) {
+  const { params } = useGlass();
   const containerRef = useRef<HTMLDivElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   
@@ -353,55 +279,47 @@ function LiquidTabs({
   }, [activeTab]);
 
   return (
-    <div className="relative inline-block">
-      {/* Outer glass container */}
-      <LiquidPanel padding="p-1.5" className="inline-flex">
-        <div ref={containerRef} className="relative flex gap-1">
-          {/* Animated sliding glass indicator */}
-          <div
-            className="absolute top-0 bottom-0 transition-all duration-500 ease-out rounded-xl overflow-hidden"
-            style={{
-              left: indicatorStyle.left,
-              width: indicatorStyle.width,
-              transform: 'translateZ(0)',
-            }}
+    <GlassPanel padding="p-1.5" className="inline-block">
+      <div ref={containerRef} className="relative flex gap-1">
+        {/* Sliding glass indicator */}
+        <div
+          className="absolute top-0 bottom-0 rounded-xl transition-all duration-500 ease-out"
+          style={{
+            left: indicatorStyle.left,
+            width: indicatorStyle.width,
+            background: `linear-gradient(135deg, 
+              rgba(255, 255, 255, ${0.2 + params.fresnel * 0.1}) 0%,
+              rgba(255, 255, 255, ${0.15 + params.fresnel * 0.05}) 100%)`,
+            boxShadow: `
+              0 4px 20px rgba(0, 0, 0, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, ${0.3 + params.glare * 0.2}),
+              0 0 ${params.glare * 15}px rgba(147, 51, 234, ${params.glare * 0.15})
+            `,
+            border: `1px solid rgba(255, 255, 255, ${0.2 + params.fresnel * 0.1})`,
+          }}
+        />
+        
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            data-tab={tab.id}
+            onClick={() => onChange(tab.id)}
+            className={`relative z-10 px-6 py-2.5 rounded-xl font-medium transition-colors duration-300 ${
+              activeTab === tab.id ? 'text-white' : 'text-white/60 hover:text-white/80'
+            }`}
           >
-            <MiniLiquidGlass 
-              width={indicatorStyle.width || 100} 
-              height={44}
-              className="w-full h-full"
-            />
-            <div 
-              className="absolute inset-0"
-              style={{
-                background: 'rgba(255, 255, 255, 0.15)',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
-              }}
-            />
-          </div>
-          
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              data-tab={tab.id}
-              onClick={() => onChange(tab.id)}
-              className={`relative z-10 px-6 py-2.5 rounded-xl font-medium transition-colors duration-300 ${
-                activeTab === tab.id ? 'text-white' : 'text-white/60 hover:text-white/80'
-              }`}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
-        </div>
-      </LiquidPanel>
-    </div>
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
+    </GlassPanel>
   );
 }
 
 // =============================================
-// LIQUID GLASS SLIDER THUMB
+// GLASS SLIDER WITH CSS THUMB
 // =============================================
-function LiquidSliderWithGlassThumb({
+function GlassSlider({
   label,
   value,
   min = 0,
@@ -416,6 +334,7 @@ function LiquidSliderWithGlassThumb({
   onChange?: (v: number) => void;
   showValue?: boolean;
 }) {
+  const { params } = useGlass();
   const [currentValue, setCurrentValue] = useState(value);
   const [isDragging, setIsDragging] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -462,48 +381,57 @@ function LiquidSliderWithGlassThumb({
         onMouseDown={(e) => { setIsDragging(true); updateValue(e.clientX); }}
       >
         {/* Track */}
-        <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2 rounded-full overflow-hidden"
+        <div 
+          className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2 rounded-full overflow-hidden"
           style={{
             background: 'rgba(255, 255, 255, 0.1)',
             boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.3)',
           }}
         >
-          {/* Filled portion */}
           <div
             className="absolute inset-y-0 left-0"
             style={{
               width: `${percentage}%`,
-              background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(147, 51, 234, 0.8))',
-              boxShadow: '0 0 10px rgba(59, 130, 246, 0.4)',
+              background: `linear-gradient(90deg, 
+                rgba(59, 130, 246, ${0.7 + params.fresnel * 0.2}), 
+                rgba(147, 51, 234, ${0.7 + params.fresnel * 0.2}))`,
+              boxShadow: `0 0 ${10 + params.glare * 10}px rgba(59, 130, 246, ${0.3 + params.glare * 0.2})`,
             }}
           />
         </div>
         
-        {/* Liquid Glass Thumb */}
+        {/* CSS Glass Thumb */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-transform duration-75"
+          className="absolute top-1/2 transition-transform duration-75"
           style={{
             left: `${percentage}%`,
             width: isDragging ? 32 : 28,
             height: isDragging ? 32 : 28,
             transform: `translate(-50%, -50%) scale(${isDragging ? 1.1 : 1})`,
+            borderRadius: '50%',
+            background: `radial-gradient(circle at 30% 30%, 
+              rgba(255, 255, 255, 0.95) 0%, 
+              rgba(255, 255, 255, 0.7) 40%,
+              rgba(200, 220, 255, 0.6) 100%)`,
+            boxShadow: `
+              0 2px 8px rgba(0, 0, 0, 0.3),
+              0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 2px rgba(255, 255, 255, 0.9),
+              inset 0 -1px 2px rgba(0, 0, 0, 0.1),
+              0 0 ${params.glare * 10}px rgba(147, 51, 234, ${params.glare * 0.3})
+            `,
+            border: `1px solid rgba(255, 255, 255, ${0.4 + params.fresnel * 0.2})`,
           }}
         >
-          <MiniLiquidGlass 
-            width={32} 
-            height={32}
-            style={{ borderRadius: '50%' }}
-          />
-          {/* Glass overlay for thumb */}
+          {/* Thumb shine */}
           <div 
-            className="absolute inset-0 rounded-full"
+            className="absolute rounded-full"
             style={{
-              background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), rgba(255,255,255,0.4))',
-              boxShadow: `
-                0 2px 8px rgba(0, 0, 0, 0.3),
-                inset 0 1px 0 rgba(255, 255, 255, 0.8),
-                inset 0 -1px 0 rgba(0, 0, 0, 0.1)
-              `,
+              top: '10%',
+              left: '15%',
+              width: '40%',
+              height: '30%',
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, transparent 100%)',
             }}
           />
         </div>
@@ -519,11 +447,13 @@ function GlassControls() {
   const { params, setParams } = useGlass();
   
   return (
-    <LiquidPanel className="sticky top-4">
-      <h3 className="text-white font-semibold mb-6 text-lg">🎛️ Global Glass Parameters</h3>
-      <p className="text-white/50 text-xs mb-6">These controls affect ALL glass elements on this page</p>
+    <GlassPanel className="sticky top-4" animate>
+      <h3 className="text-white font-semibold mb-4 text-lg flex items-center gap-2">
+        <span className="text-xl">🎛️</span> Global Glass Parameters
+      </h3>
+      <p className="text-white/50 text-xs mb-6">Controls affect ALL glass on this page</p>
       <div className="space-y-5">
-        <LiquidSliderWithGlassThumb
+        <GlassSlider
           label="Refraction"
           value={Math.round(params.refraction * 100)}
           min={100}
@@ -531,7 +461,7 @@ function GlassControls() {
           onChange={(v) => setParams({ refraction: v / 100 })}
           showValue
         />
-        <LiquidSliderWithGlassThumb
+        <GlassSlider
           label="Dispersion"
           value={params.dispersion}
           min={0}
@@ -539,7 +469,7 @@ function GlassControls() {
           onChange={(v) => setParams({ dispersion: v })}
           showValue
         />
-        <LiquidSliderWithGlassThumb
+        <GlassSlider
           label="Blur"
           value={params.blur}
           min={0}
@@ -547,7 +477,7 @@ function GlassControls() {
           onChange={(v) => setParams({ blur: v })}
           showValue
         />
-        <LiquidSliderWithGlassThumb
+        <GlassSlider
           label="Fresnel"
           value={Math.round(params.fresnel * 100)}
           min={0}
@@ -555,7 +485,7 @@ function GlassControls() {
           onChange={(v) => setParams({ fresnel: v / 100 })}
           showValue
         />
-        <LiquidSliderWithGlassThumb
+        <GlassSlider
           label="Glare"
           value={Math.round(params.glare * 100)}
           min={0}
@@ -563,7 +493,7 @@ function GlassControls() {
           onChange={(v) => setParams({ glare: v / 100 })}
           showValue
         />
-        <LiquidSliderWithGlassThumb
+        <GlassSlider
           label="Roundness"
           value={Math.round(params.roundness * 100)}
           min={0}
@@ -572,7 +502,7 @@ function GlassControls() {
           showValue
         />
       </div>
-    </LiquidPanel>
+    </GlassPanel>
   );
 }
 
@@ -584,7 +514,7 @@ function App() {
   const [glassParams, setGlassParams] = useState<GlassParams>({
     refraction: 1.4,
     dispersion: 7,
-    blur: 0, // Default blur all the way down
+    blur: 0,
     fresnel: 0.5,
     glare: 0.4,
     roundness: 0.8,
@@ -604,23 +534,21 @@ function App() {
 
   return (
     <GlassContext.Provider value={contextValue}>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
-        {/* Animated background */}
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden cursor-none">
+        {/* Liquid Glass Cursor */}
+        <LiquidCursor />
+        
+        {/* Animated background - NO floating dots */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 -left-20 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
-          
-          {/* Floating orbs */}
-          <div className="absolute top-20 right-40 w-4 h-4 bg-white/30 rounded-full animate-float" />
-          <div className="absolute top-40 left-20 w-3 h-3 bg-blue-400/40 rounded-full animate-float" style={{ animationDelay: '0.5s' }} />
-          <div className="absolute bottom-40 right-20 w-5 h-5 bg-purple-400/40 rounded-full animate-float" style={{ animationDelay: '1s' }} />
         </div>
 
         {/* Header */}
         <header className="relative z-10 py-8 px-6">
           <div className="max-w-7xl mx-auto">
-            <LiquidPanel padding="px-6 py-4" className="inline-block">
+            <GlassPanel padding="px-6 py-4" className="inline-block" animate>
               <div className="flex items-center gap-4">
                 <GlacierIcon className="w-12 h-12" />
                 <div>
@@ -628,7 +556,7 @@ function App() {
                   <p className="text-white/60 text-sm">Apple Liquid Glass for the Web</p>
                 </div>
               </div>
-            </LiquidPanel>
+            </GlassPanel>
           </div>
         </header>
 
@@ -647,8 +575,7 @@ function App() {
               Inspired by Apple's visionOS and iOS design language.
             </p>
             
-            {/* Animated Tab Bar */}
-            <LiquidTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            <GlassTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
           </div>
         </section>
 
@@ -661,7 +588,7 @@ function App() {
               <div className="space-y-12 animate-fade-in">
                 <div className="grid lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
-                    <LiquidPanel padding="p-2">
+                    <GlassPanel padding="p-2" animate>
                       <div className="rounded-2xl overflow-hidden">
                         <LiquidGlass
                           width={800}
@@ -679,7 +606,7 @@ function App() {
                       <p className="text-white/50 text-sm text-center mt-3 mb-1">
                         Move your mouse to interact with the glass
                       </p>
-                    </LiquidPanel>
+                    </GlassPanel>
                   </div>
                   
                   <div>
@@ -687,7 +614,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Multiple demos */}
                 <div>
                   <h3 className="text-2xl font-bold text-white mb-6">Different Backgrounds</h3>
                   <div className="grid md:grid-cols-3 gap-6">
@@ -696,7 +622,7 @@ function App() {
                       'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=600&q=80',
                       'https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=600&q=80',
                     ].map((bg, i) => (
-                      <LiquidPanel key={i} padding="p-2">
+                      <GlassPanel key={i} padding="p-2" animate>
                         <LiquidGlass
                           width={350}
                           height={250}
@@ -710,12 +636,12 @@ function App() {
                           interactive
                           shapeSize={[0.5, 0.45]}
                         />
-                      </LiquidPanel>
+                      </GlassPanel>
                     ))}
                   </div>
                 </div>
 
-                <LiquidPanel>
+                <GlassPanel animate>
                   <h3 className="text-xl font-bold text-white mb-4">Quick Start</h3>
                   <pre className="bg-black/30 rounded-xl p-4 overflow-x-auto text-sm">
                     <code className="text-green-400">
@@ -725,17 +651,17 @@ npm install glacier-css
 // tailwind.config.js
 import glacier from 'glacier-css';
 
-export default {
+module.exports = {
   plugins: [glacier()],
 };
 
 // Use in your HTML
-<div class="glacier-liquid glacier-blur-lg glacier-fresnel-medium">
+<div class="glacier-liquid glacier-blur-lg">
   Your liquid glass content
 </div>`}
                     </code>
                   </pre>
-                </LiquidPanel>
+                </GlassPanel>
               </div>
             )}
 
@@ -743,68 +669,58 @@ export default {
             {activeTab === 'frosted' && (
               <div className="space-y-12 animate-fade-in">
                 <div className="grid lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2">
+                  <div className="lg:col-span-2 space-y-8">
                     <div>
-                      <h3 className="text-2xl font-bold text-white mb-6">Liquid Glass Intensities</h3>
+                      <h3 className="text-2xl font-bold text-white mb-6">Glass Intensities</h3>
                       <div className="grid gap-6">
                         {[
-                          { title: 'Subtle', desc: 'Light refraction, perfect for overlays', blur: 2, fresnel: 0.3 },
-                          { title: 'Standard', desc: 'Balanced glass effect for cards', blur: 8, fresnel: 0.5 },
-                          { title: 'Heavy', desc: 'Maximum glass distortion for impact', blur: 16, fresnel: 0.8 },
+                          { title: 'Subtle', desc: 'Light refraction, perfect for overlays' },
+                          { title: 'Standard', desc: 'Balanced glass effect for cards' },
+                          { title: 'Heavy', desc: 'Maximum glass distortion for impact' },
                         ].map((item, i) => (
-                          <LiquidPanel key={i}>
+                          <GlassPanel key={i} animate>
                             <h4 className="text-white font-semibold text-lg mb-2">{item.title}</h4>
                             <p className="text-white/70 text-sm">{item.desc}</p>
-                            <div className="flex gap-4 mt-3 text-xs text-white/50">
-                              <span>Blur: {item.blur}px</span>
-                              <span>Fresnel: {Math.round(item.fresnel * 100)}%</span>
-                            </div>
-                          </LiquidPanel>
+                          </GlassPanel>
                         ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-6">Interactive Demo</h3>
+                      <div className="relative h-[400px] rounded-3xl overflow-hidden">
+                        <div 
+                          className="absolute inset-0"
+                          style={{
+                            background: 'linear-gradient(45deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
+                            backgroundSize: '400% 400%',
+                            animation: 'gradient-shift 8s ease infinite',
+                          }}
+                        />
+                        
+                        <div className="absolute inset-8 grid grid-cols-2 gap-6">
+                          <GlassPanel className="flex flex-col justify-between" animate>
+                            <div>
+                              <h4 className="text-white font-semibold text-lg mb-2">Dynamic Glass</h4>
+                              <p className="text-white/70 text-sm">Real-time parameter changes affect all glass.</p>
+                            </div>
+                            <LiquidButton variant="secondary" size="sm">Learn More</LiquidButton>
+                          </GlassPanel>
+                          
+                          <GlassPanel className="flex flex-col justify-between" animate>
+                            <div>
+                              <h4 className="text-white font-semibold text-lg mb-2">Global Controls</h4>
+                              <p className="text-white/70 text-sm">One slider changes everything.</p>
+                            </div>
+                            <LiquidButton variant="primary" size="sm">Get Started</LiquidButton>
+                          </GlassPanel>
+                        </div>
                       </div>
                     </div>
                   </div>
                   
                   <div>
                     <GlassControls />
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-2xl font-bold text-white mb-6">Interactive Demo</h3>
-                  <div className="relative h-[400px] rounded-3xl overflow-hidden">
-                    <div 
-                      className="absolute inset-0"
-                      style={{
-                        background: 'linear-gradient(45deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
-                        backgroundSize: '400% 400%',
-                        animation: 'gradient-shift 8s ease infinite',
-                      }}
-                    />
-                    
-                    <div className="absolute inset-8 grid grid-cols-2 gap-6">
-                      <LiquidPanel className="flex flex-col justify-between">
-                        <div>
-                          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center mb-4">
-                            <MiniLiquidGlass width={48} height={48} />
-                          </div>
-                          <h4 className="text-white font-semibold text-lg mb-2">Dynamic Glass</h4>
-                          <p className="text-white/70 text-sm">Real WebGL refraction on every element.</p>
-                        </div>
-                        <LiquidButton variant="secondary" size="sm">Learn More</LiquidButton>
-                      </LiquidPanel>
-                      
-                      <LiquidPanel className="flex flex-col justify-between">
-                        <div>
-                          <div className="w-12 h-12 rounded-xl overflow-hidden mb-4">
-                            <MiniLiquidGlass width={48} height={48} />
-                          </div>
-                          <h4 className="text-white font-semibold text-lg mb-2">Global Controls</h4>
-                          <p className="text-white/70 text-sm">One slider changes everything.</p>
-                        </div>
-                        <LiquidButton variant="primary" size="sm">Get Started</LiquidButton>
-                      </LiquidPanel>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -818,7 +734,7 @@ export default {
                     {/* Buttons */}
                     <div>
                       <h3 className="text-2xl font-bold text-white mb-6">Buttons</h3>
-                      <LiquidPanel>
+                      <GlassPanel animate>
                         <div className="flex flex-wrap gap-4 items-center">
                           <LiquidButton variant="primary">Primary</LiquidButton>
                           <LiquidButton variant="secondary">Secondary</LiquidButton>
@@ -826,20 +742,22 @@ export default {
                           <LiquidButton variant="primary" size="lg">Large Button</LiquidButton>
                           <LiquidButton variant="primary" size="sm">Small</LiquidButton>
                         </div>
-                      </LiquidPanel>
+                      </GlassPanel>
                     </div>
 
                     {/* Toggles */}
                     <div>
                       <h3 className="text-2xl font-bold text-white mb-6">Toggles & Checkboxes</h3>
-                      <LiquidPanel>
+                      <GlassPanel animate>
                         <div className="grid md:grid-cols-2 gap-8">
                           <div>
                             <h4 className="text-white/80 font-medium mb-4">Liquid Glass Toggle</h4>
                             <div className="space-y-4">
                               {['sm', 'md', 'lg'].map((size) => (
                                 <div key={size} className="flex items-center justify-between">
-                                  <span className="text-white/70 capitalize">{size === 'sm' ? 'Small' : size === 'md' ? 'Medium' : 'Large'}</span>
+                                  <span className="text-white/70 capitalize">
+                                    {size === 'sm' ? 'Small' : size === 'md' ? 'Medium' : 'Large'}
+                                  </span>
                                   <LiquidToggle size={size as 'sm' | 'md' | 'lg'} checked={size === 'md'} />
                                 </div>
                               ))}
@@ -855,31 +773,31 @@ export default {
                             </div>
                           </div>
                         </div>
-                      </LiquidPanel>
+                      </GlassPanel>
                     </div>
 
-                    {/* Sliders with Glass Thumbs */}
+                    {/* Sliders */}
                     <div>
-                      <h3 className="text-2xl font-bold text-white mb-6">Sliders (with Liquid Glass Thumb)</h3>
-                      <LiquidPanel>
+                      <h3 className="text-2xl font-bold text-white mb-6">Sliders (Liquid Glass Thumb)</h3>
+                      <GlassPanel animate>
                         <div className="grid md:grid-cols-2 gap-8">
                           <div className="space-y-6">
-                            <LiquidSliderWithGlassThumb label="Volume" value={75} showValue />
-                            <LiquidSliderWithGlassThumb label="Brightness" value={50} showValue />
-                            <LiquidSliderWithGlassThumb label="Opacity" value={100} showValue />
+                            <GlassSlider label="Volume" value={75} showValue />
+                            <GlassSlider label="Brightness" value={50} showValue />
+                            <GlassSlider label="Opacity" value={100} showValue />
                           </div>
                           <div className="space-y-6">
-                            <LiquidSliderWithGlassThumb label="Blur Radius" value={12} max={50} showValue />
-                            <LiquidSliderWithGlassThumb label="Saturation" value={180} max={200} showValue />
+                            <GlassSlider label="Blur Radius" value={12} max={50} showValue />
+                            <GlassSlider label="Saturation" value={180} max={200} showValue />
                           </div>
                         </div>
-                      </LiquidPanel>
+                      </GlassPanel>
                     </div>
 
                     {/* Inputs */}
                     <div>
                       <h3 className="text-2xl font-bold text-white mb-6">Inputs</h3>
-                      <LiquidPanel>
+                      <GlassPanel animate>
                         <div className="grid md:grid-cols-2 gap-6">
                           <LiquidInput placeholder="Enter your name" />
                           <LiquidInput 
@@ -894,7 +812,7 @@ export default {
                           <LiquidInput placeholder="Email address" type="email" />
                           <LiquidInput placeholder="Password" type="password" />
                         </div>
-                      </LiquidPanel>
+                      </GlassPanel>
                     </div>
 
                     {/* Cards */}
@@ -920,7 +838,7 @@ export default {
                     {/* Form */}
                     <div>
                       <h3 className="text-2xl font-bold text-white mb-6">Complete Form</h3>
-                      <LiquidPanel className="max-w-xl mx-auto">
+                      <GlassPanel className="max-w-xl mx-auto" animate>
                         <h4 className="text-white font-semibold text-xl mb-6 text-center">Create Account</h4>
                         <div className="space-y-4">
                           <LiquidInput placeholder="Full Name" />
@@ -936,7 +854,7 @@ export default {
                             Create Account
                           </LiquidButton>
                         </div>
-                      </LiquidPanel>
+                      </GlassPanel>
                     </div>
                   </div>
                   
@@ -967,19 +885,10 @@ export default {
         </footer>
 
         <style>{`
-          @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-20px); }
-          }
-          
           @keyframes gradient-shift {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
-          }
-          
-          .animate-float {
-            animation: float 6s ease-in-out infinite;
           }
           
           .animate-fade-in {
