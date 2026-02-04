@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, useMemo } from 'react';
 import { LiquidGlass } from './components/LiquidGlass';
+import { GlobalGlassRenderer, WebGLGlassPanel } from './components/GlobalGlassRenderer';
 import {
   LiquidToggle,
   LiquidInput,
@@ -107,12 +108,7 @@ function getBackgroundUrl(id: number, size: 'small' | 'medium' | 'large' = 'medi
 // =============================================
 // ANIMATED BACKGROUND - Shows off refraction with random Unsplash
 // =============================================
-function AnimatedBackground() {
-  // Pick a random page background once on mount
-  const backgroundImage = useRef(
-    PAGE_BACKGROUNDS[Math.floor(Math.random() * PAGE_BACKGROUNDS.length)]
-  ).current;
-
+function AnimatedBackground({ backgroundImage }: { backgroundImage: string }) {
   // Memoize random positions so they don't change on re-render
   const stars = useRef(
     [...Array(30)].map(() => ({
@@ -592,7 +588,7 @@ function GlassControls() {
   };
   
   return (
-    <GlassPanel className="sticky top-4" borderRadius={24} intensity="heavy">
+    <WebGLGlassPanel className="sticky top-4 p-6" roundness={0.15} intensity="heavy">
       <h3 className="text-white font-semibold mb-4 text-lg flex items-center gap-2">
         <span className="text-xl">🎛️</span> Glass Parameters
       </h3>
@@ -776,7 +772,7 @@ function GlassControls() {
           ))}
         </div>
       </div>
-    </GlassPanel>
+    </WebGLGlassPanel>
   );
 }
 
@@ -786,6 +782,13 @@ function GlassControls() {
 function App() {
   const [activeTab, setActiveTab] = useState('liquid');
   const [fullscreenDemo, setFullscreenDemo] = useState(false);
+  
+  // Pick random page background once
+  const pageBackground = useMemo(() => 
+    PAGE_BACKGROUNDS[Math.floor(Math.random() * PAGE_BACKGROUNDS.length)],
+    []
+  );
+  
   const [glassParams, setGlassParams] = useState<GlassParams>({
     refraction: 1.52,
     dispersion: 12,
@@ -842,7 +845,7 @@ function App() {
       {/* Fullscreen Demo Mode */}
       {fullscreenDemo && (
         <div className="fixed inset-0 z-50 bg-black">
-          <AnimatedBackground />
+          <AnimatedBackground backgroundImage={pageBackground} />
           <LiquidGlass
             width={window.innerWidth}
             height={window.innerHeight}
@@ -872,9 +875,21 @@ function App() {
         </div>
       )}
 
+      <GlobalGlassRenderer
+        backgroundImage={pageBackground}
+        refraction={glassParams.refraction}
+        dispersion={glassParams.dispersion}
+        blur={glassParams.blur}
+        fresnel={glassParams.fresnel}
+        glare={glassParams.glare}
+        glareAngle={glassParams.glareAngle}
+        tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
+        liquidWobble={glassParams.liquidWobble}
+        thickness={glassParams.thickness}
+      >
       <div className={`min-h-screen relative overflow-hidden cursor-none ${fullscreenDemo ? 'hidden' : ''}`}>
         {/* Animated Background */}
-        <AnimatedBackground />
+        <AnimatedBackground backgroundImage={pageBackground} />
         
         {/* Liquid Glass Cursor */}
         <LiquidCursor />
@@ -1166,7 +1181,7 @@ module.exports = {
                     {/* Form */}
                     <div>
                       <h3 className="text-2xl font-bold text-white mb-6">Complete Form</h3>
-                      <GlassPanel className="max-w-xl mx-auto" borderRadius={24} intensity="heavy">
+                      <WebGLGlassPanel className="max-w-xl mx-auto p-6" roundness={0.15} intensity="heavy">
                         <h4 className="text-white font-semibold text-xl mb-6 text-center">Create Account</h4>
                         <div className="space-y-4">
                           <LiquidInput placeholder="Full Name" />
@@ -1182,7 +1197,7 @@ module.exports = {
                             Create Account
                           </LiquidButton>
                         </div>
-                      </GlassPanel>
+                      </WebGLGlassPanel>
                     </div>
                   </div>
                   
@@ -1283,6 +1298,7 @@ module.exports = {
           }
         `}</style>
       </div>
+      </GlobalGlassRenderer>
     </GlassContext.Provider>
   );
 }
