@@ -145,18 +145,18 @@ function AnimatedBackground() {
         className="absolute inset-0 bg-cover bg-center"
         style={{
           backgroundImage: `url(${backgroundImage})`,
-          filter: 'brightness(0.4) saturate(1.2)',
+          filter: 'brightness(0.6) saturate(1.1)',
         }}
       />
-      {/* Overlay gradient for depth */}
+      {/* Overlay gradient for depth - more transparent */}
       <div 
         className="absolute inset-0"
         style={{
           background: `
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.4), transparent),
-            radial-gradient(ellipse 60% 40% at 90% 100%, rgba(255, 107, 107, 0.3), transparent),
-            radial-gradient(ellipse 60% 40% at 10% 100%, rgba(79, 172, 254, 0.3), transparent),
-            linear-gradient(to bottom, rgba(15, 12, 41, 0.7), rgba(48, 43, 99, 0.5), rgba(36, 36, 62, 0.7))
+            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.2), transparent),
+            radial-gradient(ellipse 60% 40% at 90% 100%, rgba(255, 107, 107, 0.15), transparent),
+            radial-gradient(ellipse 60% 40% at 10% 100%, rgba(79, 172, 254, 0.15), transparent),
+            linear-gradient(to bottom, rgba(15, 12, 41, 0.4), rgba(48, 43, 99, 0.3), rgba(36, 36, 62, 0.4))
           `,
         }}
       />
@@ -167,8 +167,8 @@ function AnimatedBackground() {
         style={{
           top: '10%',
           left: '-5%',
-          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(99, 102, 241, 0) 70%)',
-          filter: 'blur(40px)',
+          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0) 70%)',
+          filter: 'blur(20px)',
         }}
       />
       <div 
@@ -176,8 +176,8 @@ function AnimatedBackground() {
         style={{
           bottom: '5%',
           right: '-10%',
-          background: 'radial-gradient(circle, rgba(236, 72, 153, 0.4) 0%, rgba(236, 72, 153, 0) 70%)',
-          filter: 'blur(40px)',
+          background: 'radial-gradient(circle, rgba(236, 72, 153, 0.25) 0%, rgba(236, 72, 153, 0) 70%)',
+          filter: 'blur(20px)',
           animationDelay: '-5s',
         }}
       />
@@ -186,8 +186,8 @@ function AnimatedBackground() {
         style={{
           top: '50%',
           left: '60%',
-          background: 'radial-gradient(circle, rgba(34, 211, 238, 0.35) 0%, rgba(34, 211, 238, 0) 70%)',
-          filter: 'blur(30px)',
+          background: 'radial-gradient(circle, rgba(34, 211, 238, 0.2) 0%, rgba(34, 211, 238, 0) 70%)',
+          filter: 'blur(15px)',
           animationDelay: '-3s',
         }}
       />
@@ -203,7 +203,7 @@ function AnimatedBackground() {
             left: orb.left,
             top: orb.top,
             background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
-            filter: 'blur(20px)',
+            filter: 'blur(10px)',
             animationDelay: orb.delay,
             animationDuration: orb.duration,
           }}
