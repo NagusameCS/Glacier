@@ -53,32 +53,16 @@ float sdSuperellipse(vec2 p, vec2 size, float n) {
   return (pow(gm, 1.0 / n) - 1.0) * min(size.x, size.y);
 }
 
-// Get normal from SDF
+// Get normal from SDF (surface curvature direction)
 vec2 getNormal(vec2 p, vec2 size, float n) {
-  float eps = 0.001;
+  float eps = 0.5;
   float d = sdSuperellipse(p, size, n);
   float dx = sdSuperellipse(p + vec2(eps, 0.0), size, n) - d;
   float dy = sdSuperellipse(p + vec2(0.0, eps), size, n) - d;
   return normalize(vec2(dx, dy));
 }
 
-// Color space conversions for proper glare
-vec3 rgb2hsv(vec3 c) {
-  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
-  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-  float d = q.x - min(q.w, q.y);
-  float e = 1.0e-10;
-  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-}
-
-vec3 hsv2rgb(vec3 c) {
-  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-}
-
-// Simple box blur for background
+// Smooth blur sampling for background
 vec4 blurredSample(sampler2D tex, vec2 uv, float radius) {
   vec4 color = vec4(0.0);
   float total = 0.0;
@@ -88,7 +72,7 @@ vec4 blurredSample(sampler2D tex, vec2 uv, float radius) {
       vec2 offset = vec2(x, y) * radius / u_resolution;
       float weight = 1.0 - length(vec2(x, y)) / 3.5;
       weight = max(weight, 0.0);
-      color += texture(tex, uv + offset) * weight;
+      color += texture(tex, clamp(uv + offset, 0.0, 1.0)) * weight;
       total += weight;
     }
   }
@@ -100,79 +84,111 @@ void main() {
   vec2 uv = v_uv;
   vec2 pixelPos = uv * u_resolution;
   
-  // Shape position (centered with mouse offset)
+  // Shape position (centered with mouse offset for interactivity)
   vec2 shapeCenter = u_resolution * 0.5 + u_shapePos * u_resolution;
   vec2 p = pixelPos - shapeCenter;
   
-  // Calculate SDF
-  float n = 2.0 + u_roundness * 3.0; // 2 = circle, 5 = squircle
+  // Calculate SDF - squircle shape
+  float n = 2.0 + u_roundness * 4.0;
   vec2 size = u_shapeSize * u_resolution * 0.5;
   float sd = sdSuperellipse(p, size, n);
   
-  // Normalize to resolution for consistent thickness
-  float nsd = sd / u_resolution.y;
+  // Get glass thickness
+  float minSize = min(size.x, size.y);
+  float thickness = u_refThickness * 2.0;
   
   if (sd < 0.0) {
     // Inside the glass shape
     float depth = -sd;
-    float normalizedDepth = depth / u_refThickness;
-    normalizedDepth = clamp(normalizedDepth, 0.0, 1.0);
     
-    // Get surface normal
+    // Normalize depth: 0 at edge, 1 at center
+    float normalizedDepth = clamp(depth / thickness, 0.0, 1.0);
+    
+    // Get surface normal for refraction direction
     vec2 normal = getNormal(p, size, n);
     
-    // Calculate refraction edge factor
-    float x_R_ratio = 1.0 - normalizedDepth;
-    float thetaI = asin(pow(x_R_ratio, 2.0));
-    float thetaT = asin(1.0 / u_refFactor * sin(thetaI));
-    float edgeFactor = -tan(thetaT - thetaI);
-    edgeFactor = clamp(edgeFactor, 0.0, 1.0);
+    // === REFRACTION ===
+    // Calculate refraction using Snell's law approximation
+    // More refraction at edges where light enters at angle
+    float edgeFactor = pow(1.0 - normalizedDepth, 1.5);
     
-    // Refraction offset with chromatic dispersion
-    vec2 refractionOffset = normal * edgeFactor * 0.05;
+    // Refraction strength based on IOR
+    float refractionStrength = (u_refFactor - 1.0) * 0.15;
     
-    float dispersionAmount = u_refDispersion * 0.002;
+    // Base refraction offset
+    vec2 refractionOffset = normal * edgeFactor * refractionStrength;
     
-    // Sample with chromatic aberration
-    vec4 colorR = blurredSample(u_background, uv - refractionOffset * (1.0 - dispersionAmount), u_blur);
-    vec4 colorG = blurredSample(u_background, uv - refractionOffset, u_blur);
-    vec4 colorB = blurredSample(u_background, uv - refractionOffset * (1.0 + dispersionAmount), u_blur);
+    // Chromatic dispersion - different wavelengths refract differently
+    float dispersionOffset = u_refDispersion * 0.003 * edgeFactor;
+    
+    // Sample background with chromatic aberration (RGB split)
+    vec2 uvR = uv - refractionOffset * (1.0 - dispersionOffset);
+    vec2 uvG = uv - refractionOffset;
+    vec2 uvB = uv - refractionOffset * (1.0 + dispersionOffset);
+    
+    // Clamp UVs to prevent sampling outside texture
+    uvR = clamp(uvR, 0.0, 1.0);
+    uvG = clamp(uvG, 0.0, 1.0);
+    uvB = clamp(uvB, 0.0, 1.0);
+    
+    // Sample with blur
+    float blurAmount = u_blur * (1.0 - normalizedDepth * 0.3);
+    vec4 colorR = blurredSample(u_background, uvR, blurAmount);
+    vec4 colorG = blurredSample(u_background, uvG, blurAmount);
+    vec4 colorB = blurredSample(u_background, uvB, blurAmount);
     
     vec4 refractedColor = vec4(colorR.r, colorG.g, colorB.b, 1.0);
     
-    // Apply tint
-    refractedColor = mix(refractedColor, vec4(u_tint.rgb, 1.0), u_tint.a * 0.5);
+    // === FRESNEL - Edge reflection only ===
+    // Fresnel effect: more reflection at grazing angles (edges)
+    // Should NOT tint the center of the glass
+    float fresnelEdge = pow(1.0 - normalizedDepth, 4.0);
+    float fresnelIntensity = fresnelEdge * u_fresnelFactor;
     
-    // Fresnel reflection
-    float fresnelFactor = pow(1.0 - normalizedDepth, 5.0);
-    fresnelFactor *= u_fresnelFactor;
+    // Apply fresnel as additive edge highlight, not a full tint
+    vec3 fresnelHighlight = vec3(1.0, 1.0, 0.98) * fresnelIntensity * 0.25;
     
-    fragColor = mix(refractedColor, vec4(1.0), fresnelFactor * 0.4);
+    // === GLARE / SPECULAR ===
+    // Glare based on surface angle relative to "light"
+    float glareAngle = atan(normal.y, normal.x) * 2.0 + u_glareAngle + u_time * 0.2;
+    float glareIntensity = (0.5 + sin(glareAngle) * 0.5);
+    glareIntensity *= edgeFactor * u_glareFactor;
+    glareIntensity = pow(glareIntensity, 2.5);
     
-    // Glare effect
-    float glareAngle = atan(normal.y, normal.x) * 2.0 + u_glareAngle;
-    float glareFactor = (0.5 + sin(glareAngle) * 0.5);
-    glareFactor *= (1.0 - normalizedDepth) * u_glareFactor;
-    glareFactor = pow(glareFactor, 2.0);
+    // Warm-tinted glare highlight
+    vec3 glareColor = vec3(1.0, 0.98, 0.95) * glareIntensity * 0.35;
     
-    vec3 glareColor = hsv2rgb(vec3(0.1, 0.1, 1.0)); // Warm white glare
-    fragColor = mix(fragColor, vec4(glareColor, 1.0), glareFactor * 0.3);
+    // === COMBINE EFFECTS ===
+    vec3 finalColor = refractedColor.rgb;
     
-    // Edge darkening
-    float edgeDark = smoothstep(0.0, 0.1, normalizedDepth);
-    fragColor.rgb *= mix(0.95, 1.0, edgeDark);
+    // Add tint (very subtle)
+    finalColor = mix(finalColor, u_tint.rgb, u_tint.a * 0.15);
     
-    // Anti-aliasing at edges
-    float aa = smoothstep(0.0, 2.0, -sd);
-    fragColor.a = aa;
+    // Add fresnel edge highlight
+    finalColor += fresnelHighlight;
+    
+    // Add glare
+    finalColor += glareColor;
+    
+    // === INNER SHADOW at very edge ===
+    float innerShadow = smoothstep(0.0, 0.08, normalizedDepth);
+    finalColor *= mix(0.92, 1.0, innerShadow);
+    
+    // === TOP EDGE HIGHLIGHT ===
+    float topHighlight = smoothstep(0.6, 0.0, v_uv.y) * (1.0 - normalizedDepth) * 0.08 * u_fresnelFactor;
+    finalColor += vec3(topHighlight);
+    
+    // Anti-aliasing at shape edge
+    float aa = smoothstep(0.0, 1.5, -sd);
+    fragColor = vec4(finalColor, aa);
     
   } else {
-    // Outside - show background
+    // Outside the glass - show background
     fragColor = texture(u_background, uv);
   }
   
-  // Smooth blend at edge
-  float edgeBlend = smoothstep(2.0, -2.0, sd);
+  // Smooth blend at edge for anti-aliasing
+  float edgeBlend = smoothstep(1.5, -1.5, sd);
   vec4 bgColor = texture(u_background, uv);
   fragColor = mix(bgColor, fragColor, edgeBlend);
 }`;

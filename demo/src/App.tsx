@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { LiquidGlass } from './components/LiquidGlass';
 import {
   LiquidToggle,
@@ -9,7 +9,7 @@ import {
 } from './components/LiquidComponents';
 
 // =============================================
-// GLOBAL GLASS CONTEXT
+// GLOBAL GLASS CONTEXT - Parameters for WebGL demos
 // =============================================
 interface GlassParams {
   refraction: number;
@@ -20,363 +20,201 @@ interface GlassParams {
   roundness: number;
 }
 
-interface GlassElement {
-  id: string;
-  rect: DOMRect;
-  borderRadius: number;
-}
-
 interface GlassContextType {
   params: GlassParams;
   setParams: (params: Partial<GlassParams>) => void;
-  registerElement: (id: string, element: HTMLElement, borderRadius?: number) => void;
-  unregisterElement: (id: string) => void;
-  elements: Map<string, GlassElement>;
 }
 
 const GlassContext = createContext<GlassContextType>({
-  params: { refraction: 1.4, dispersion: 7, blur: 0, fresnel: 0.5, glare: 0.4, roundness: 0.8 },
+  params: { refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, glare: 0.3, roundness: 0.8 },
   setParams: () => {},
-  registerElement: () => {},
-  unregisterElement: () => {},
-  elements: new Map(),
 });
 
 const useGlass = () => useContext(GlassContext);
 
 // =============================================
-// SHARED WEBGL GLASS RENDERER - ONE CONTEXT FOR ALL
+// ANIMATED BACKGROUND - Shows off refraction
 // =============================================
-function SharedGlassRenderer() {
-  const { params, elements } = useGlass();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const glRef = useRef<WebGL2RenderingContext | null>(null);
-  const programRef = useRef<WebGLProgram | null>(null);
-  const rafRef = useRef<number>(0);
-  const timeRef = useRef(0);
-  const mouseRef = useRef({ x: 0, y: 0 });
-
-  const vertexShader = `#version 300 es
-    in vec2 a_position;
-    in vec2 a_uv;
-    out vec2 v_uv;
-    out vec2 v_pos;
-    uniform vec2 u_resolution;
-    
-    void main() {
-      vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
-      gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-      v_uv = a_uv;
-      v_pos = a_position;
-    }`;
-
-  const fragmentShader = `#version 300 es
-    precision highp float;
-    in vec2 v_uv;
-    in vec2 v_pos;
-    out vec4 fragColor;
-    
-    uniform float u_time;
-    uniform vec2 u_mouse;
-    uniform vec2 u_size;
-    uniform vec2 u_center;
-    uniform float u_borderRadius;
-    uniform float u_fresnel;
-    uniform float u_glare;
-    uniform float u_dispersion;
-    uniform float u_blur;
-    uniform float u_roundness;
-    
-    float sdRoundedBox(vec2 p, vec2 b, float r) {
-      vec2 q = abs(p) - b + r;
-      return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-    }
-    
-    void main() {
-      vec2 center = u_size * 0.5;
-      vec2 p = (v_uv - 0.5) * u_size;
-      
-      float radius = min(u_borderRadius, min(u_size.x, u_size.y) * 0.5);
-      float sd = sdRoundedBox(p, u_size * 0.5 - 1.0, radius);
-      
-      if (sd > 0.0) {
-        discard;
-      }
-      
-      float depth = clamp(-sd / (min(u_size.x, u_size.y) * 0.5), 0.0, 1.0);
-      
-      // Base glass color
-      vec3 baseColor = vec3(0.92, 0.94, 0.98);
-      
-      // Fresnel edge brightness
-      float fresnelFactor = pow(1.0 - depth, 3.0) * u_fresnel;
-      
-      // Animated glare based on position
-      vec2 glareDir = normalize(v_pos - u_mouse);
-      float angle = atan(glareDir.y, glareDir.x) + u_time * 0.3;
-      float glareFactor = (0.5 + sin(angle * 2.0) * 0.5) * (1.0 - depth * 0.5) * u_glare;
-      glareFactor = pow(glareFactor, 1.5);
-      
-      // Mouse proximity glow
-      float mouseDist = length(v_pos - u_mouse);
-      float mouseGlow = exp(-mouseDist * 0.003) * u_glare * 0.5;
-      
-      // Chromatic hints
-      float dispersionHint = u_dispersion * 0.005 * (1.0 - depth);
-      
-      vec3 color = baseColor;
-      color.r += dispersionHint * 0.3;
-      color.b -= dispersionHint * 0.2;
-      
-      // Apply effects
-      color = mix(color, vec3(1.0), fresnelFactor * 0.5);
-      color = mix(color, vec3(1.0, 1.0, 0.98), glareFactor * 0.4);
-      color += vec3(mouseGlow * 0.3, mouseGlow * 0.2, mouseGlow * 0.4);
-      
-      // Edge darkening
-      color *= mix(0.9, 1.0, smoothstep(0.0, 0.15, depth));
-      
-      // Inner shadow at edges
-      float innerShadow = smoothstep(0.0, 8.0, -sd) * 0.15;
-      color *= (1.0 - innerShadow);
-      
-      // Top highlight
-      float topHighlight = smoothstep(0.4, 0.0, v_uv.y) * (1.0 - depth) * 0.2 * u_fresnel;
-      color += topHighlight;
-      
-      float alpha = smoothstep(1.0, -1.0, sd) * (0.7 + u_fresnel * 0.25);
-      
-      fragColor = vec4(color, alpha);
-    }`;
-
-  // Initialize WebGL once
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const gl = canvas.getContext('webgl2', { 
-      alpha: true, 
-      premultipliedAlpha: false,
-      antialias: true 
-    });
-    if (!gl) {
-      console.error('WebGL2 not supported');
-      return;
-    }
-    glRef.current = gl;
-
-    // Create shaders
-    const createShader = (type: number, source: string) => {
-      const shader = gl.createShader(type);
-      if (!shader) return null;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error('Shader error:', gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
-    };
-
-    const vs = createShader(gl.VERTEX_SHADER, vertexShader);
-    const fs = createShader(gl.FRAGMENT_SHADER, fragmentShader);
-    if (!vs || !fs) return;
-
-    const program = gl.createProgram();
-    if (!program) return;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Program link error:', gl.getProgramInfoLog(program));
-      return;
-    }
-    programRef.current = program;
-
-    // Mouse tracking
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-    };
-  }, []);
-
-  // Render loop
-  useEffect(() => {
-    const gl = glRef.current;
-    const program = programRef.current;
-    if (!gl || !program) return;
-
-    const render = () => {
-      timeRef.current += 0.016;
-      
-      const dpr = window.devicePixelRatio || 1;
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      
-      if (canvasRef.current) {
-        canvasRef.current.width = width * dpr;
-        canvasRef.current.height = height * dpr;
-        canvasRef.current.style.width = `${width}px`;
-        canvasRef.current.style.height = `${height}px`;
-      }
-      
-      gl.viewport(0, 0, width * dpr, height * dpr);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      
-      gl.useProgram(program);
-
-      // Get uniform locations
-      const uResolution = gl.getUniformLocation(program, 'u_resolution');
-      const uTime = gl.getUniformLocation(program, 'u_time');
-      const uMouse = gl.getUniformLocation(program, 'u_mouse');
-      const uSize = gl.getUniformLocation(program, 'u_size');
-      const uCenter = gl.getUniformLocation(program, 'u_center');
-      const uBorderRadius = gl.getUniformLocation(program, 'u_borderRadius');
-      const uFresnel = gl.getUniformLocation(program, 'u_fresnel');
-      const uGlare = gl.getUniformLocation(program, 'u_glare');
-      const uDispersion = gl.getUniformLocation(program, 'u_dispersion');
-      const uBlur = gl.getUniformLocation(program, 'u_blur');
-      const uRoundness = gl.getUniformLocation(program, 'u_roundness');
-
-      gl.uniform2f(uResolution, width * dpr, height * dpr);
-      gl.uniform1f(uTime, timeRef.current);
-      gl.uniform2f(uMouse, mouseRef.current.x * dpr, mouseRef.current.y * dpr);
-      gl.uniform1f(uFresnel, params.fresnel);
-      gl.uniform1f(uGlare, params.glare);
-      gl.uniform1f(uDispersion, params.dispersion);
-      gl.uniform1f(uBlur, params.blur);
-      gl.uniform1f(uRoundness, params.roundness);
-
-      // Render each registered element
-      elements.forEach((element) => {
-        const { rect, borderRadius } = element;
-        
-        const x = rect.left * dpr;
-        const y = rect.top * dpr;
-        const w = rect.width * dpr;
-        const h = rect.height * dpr;
-        
-        // Create quad for this element
-        const positions = new Float32Array([
-          x, y,         0, 0,
-          x + w, y,     1, 0,
-          x, y + h,     0, 1,
-          x, y + h,     0, 1,
-          x + w, y,     1, 0,
-          x + w, y + h, 1, 1,
-        ]);
-
-        const buffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
-
-        const aPosition = gl.getAttribLocation(program, 'a_position');
-        const aUv = gl.getAttribLocation(program, 'a_uv');
-        
-        gl.enableVertexAttribArray(aPosition);
-        gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 16, 0);
-        gl.enableVertexAttribArray(aUv);
-        gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 16, 8);
-
-        gl.uniform2f(uSize, w, h);
-        gl.uniform2f(uCenter, x + w / 2, y + h / 2);
-        gl.uniform1f(uBorderRadius, borderRadius * dpr);
-
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-        gl.deleteBuffer(buffer);
-      });
-
-      rafRef.current = requestAnimationFrame(render);
-    };
-
-    rafRef.current = requestAnimationFrame(render);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [params, elements]);
-
+function AnimatedBackground() {
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 pointer-events-none z-[100]"
-      style={{ width: '100vw', height: '100vh' }}
-    />
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {/* Main gradient base */}
+      <div 
+        className="absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.3), transparent),
+            radial-gradient(ellipse 60% 40% at 90% 100%, rgba(255, 107, 107, 0.2), transparent),
+            radial-gradient(ellipse 60% 40% at 10% 100%, rgba(79, 172, 254, 0.2), transparent),
+            linear-gradient(to bottom, #0f0c29, #302b63, #24243e)
+          `,
+        }}
+      />
+      
+      {/* Large floating orbs */}
+      <div 
+        className="absolute w-[600px] h-[600px] rounded-full animate-float-slow"
+        style={{
+          top: '10%',
+          left: '-5%',
+          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(99, 102, 241, 0) 70%)',
+          filter: 'blur(40px)',
+        }}
+      />
+      <div 
+        className="absolute w-[500px] h-[500px] rounded-full animate-float-slow-reverse"
+        style={{
+          bottom: '5%',
+          right: '-10%',
+          background: 'radial-gradient(circle, rgba(236, 72, 153, 0.4) 0%, rgba(236, 72, 153, 0) 70%)',
+          filter: 'blur(40px)',
+          animationDelay: '-5s',
+        }}
+      />
+      <div 
+        className="absolute w-[400px] h-[400px] rounded-full animate-float-medium"
+        style={{
+          top: '50%',
+          left: '60%',
+          background: 'radial-gradient(circle, rgba(34, 211, 238, 0.35) 0%, rgba(34, 211, 238, 0) 70%)',
+          filter: 'blur(30px)',
+          animationDelay: '-3s',
+        }}
+      />
+      
+      {/* Smaller animated orbs */}
+      {[...Array(8)].map((_, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full animate-float-random"
+          style={{
+            width: 100 + Math.random() * 150,
+            height: 100 + Math.random() * 150,
+            left: `${10 + (i * 12)}%`,
+            top: `${20 + Math.sin(i) * 30}%`,
+            background: `radial-gradient(circle, ${
+              ['rgba(251, 146, 60, 0.3)', 'rgba(168, 85, 247, 0.3)', 'rgba(56, 189, 248, 0.3)', 
+               'rgba(250, 204, 21, 0.3)', 'rgba(52, 211, 153, 0.3)', 'rgba(244, 114, 182, 0.3)',
+               'rgba(96, 165, 250, 0.3)', 'rgba(192, 132, 252, 0.3)'][i]
+            } 0%, transparent 70%)`,
+            filter: 'blur(20px)',
+            animationDelay: `${-i * 2}s`,
+            animationDuration: `${15 + i * 3}s`,
+          }}
+        />
+      ))}
+      
+      {/* Light streaks */}
+      <div className="absolute inset-0 overflow-hidden opacity-30">
+        <div 
+          className="absolute h-[1px] bg-gradient-to-r from-transparent via-white to-transparent animate-streak"
+          style={{ top: '20%', left: '-50%', width: '100%' }}
+        />
+        <div 
+          className="absolute h-[1px] bg-gradient-to-r from-transparent via-blue-300 to-transparent animate-streak"
+          style={{ top: '60%', left: '-50%', width: '80%', animationDelay: '-3s', animationDuration: '8s' }}
+        />
+        <div 
+          className="absolute h-[1px] bg-gradient-to-r from-transparent via-purple-300 to-transparent animate-streak"
+          style={{ top: '80%', left: '-50%', width: '120%', animationDelay: '-6s', animationDuration: '12s' }}
+        />
+      </div>
+      
+      {/* Particle field */}
+      <div className="absolute inset-0">
+        {[...Array(30)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 bg-white rounded-full animate-twinkle"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              opacity: 0.2 + Math.random() * 0.5,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${3 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Noise texture overlay for depth */}
+      <div 
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+        }}
+      />
+    </div>
   );
 }
 
 // =============================================
-// GLASS PANEL - Registers with shared renderer
+// CSS GLASS PANEL - No WebGL, just backdrop-filter
 // =============================================
-let panelIdCounter = 0;
-
 function GlassPanel({ 
   children, 
   className = '',
   padding = 'p-6',
   borderRadius = 24,
+  intensity = 'normal',
 }: { 
   children: React.ReactNode;
   className?: string;
   padding?: string;
   borderRadius?: number;
+  intensity?: 'light' | 'normal' | 'heavy';
 }) {
-  const { registerElement, unregisterElement } = useGlass();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const idRef = useRef(`panel-${++panelIdCounter}`);
+  const intensityStyles = {
+    light: {
+      bg: 'rgba(255, 255, 255, 0.05)',
+      blur: '12px',
+      border: 'rgba(255, 255, 255, 0.1)',
+    },
+    normal: {
+      bg: 'rgba(255, 255, 255, 0.08)',
+      blur: '20px',
+      border: 'rgba(255, 255, 255, 0.15)',
+    },
+    heavy: {
+      bg: 'rgba(255, 255, 255, 0.12)',
+      blur: '30px',
+      border: 'rgba(255, 255, 255, 0.2)',
+    },
+  };
 
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!panel) return;
-
-    const updateRect = () => {
-      registerElement(idRef.current, panel, borderRadius);
-    };
-
-    updateRect();
-    
-    const observer = new ResizeObserver(updateRect);
-    observer.observe(panel);
-    
-    window.addEventListener('scroll', updateRect, true);
-    window.addEventListener('resize', updateRect);
-
-    return () => {
-      unregisterElement(idRef.current);
-      observer.disconnect();
-      window.removeEventListener('scroll', updateRect, true);
-      window.removeEventListener('resize', updateRect);
-    };
-  }, [registerElement, unregisterElement, borderRadius]);
+  const styles = intensityStyles[intensity];
 
   return (
     <div
-      ref={panelRef}
       className={`relative overflow-hidden ${className}`}
-      style={{ borderRadius }}
+      style={{ 
+        borderRadius,
+        background: styles.bg,
+        backdropFilter: `blur(${styles.blur}) saturate(180%)`,
+        WebkitBackdropFilter: `blur(${styles.blur}) saturate(180%)`,
+        border: `1px solid ${styles.border}`,
+        boxShadow: `
+          0 8px 32px rgba(0, 0, 0, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.1)
+        `,
+      }}
     >
+      {/* Top edge highlight */}
+      <div 
+        className="absolute inset-x-0 top-0 h-px"
+        style={{
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3) 50%, transparent)',
+        }}
+      />
       <div className={`relative z-10 ${padding}`}>{children}</div>
     </div>
   );
 }
 
 // =============================================
-// GLASS SLIDER WITH WEBGL THUMB
+// CSS GLASS SLIDER - Performant, no WebGL
 // =============================================
-let sliderIdCounter = 0;
-
 function GlassSlider({
   label,
   value,
@@ -392,12 +230,9 @@ function GlassSlider({
   onChange?: (v: number) => void;
   showValue?: boolean;
 }) {
-  const { registerElement, unregisterElement, params } = useGlass();
   const [currentValue, setCurrentValue] = useState(value);
   const [isDragging, setIsDragging] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
-  const thumbRef = useRef<HTMLDivElement>(null);
-  const idRef = useRef(`thumb-${++sliderIdCounter}`);
 
   useEffect(() => {
     setCurrentValue(value);
@@ -405,32 +240,14 @@ function GlassSlider({
 
   const percentage = ((currentValue - min) / (max - min)) * 100;
 
-  // Register thumb with WebGL renderer
-  useEffect(() => {
-    const thumb = thumbRef.current;
-    if (!thumb) return;
-
-    const updateRect = () => {
-      registerElement(idRef.current, thumb, 50); // 50% = circle
-    };
-
-    updateRect();
-    const interval = setInterval(updateRect, 50); // Update frequently for smooth tracking
-
-    return () => {
-      clearInterval(interval);
-      unregisterElement(idRef.current);
-    };
-  }, [registerElement, unregisterElement, percentage]);
-
-  const updateValue = useCallback((clientX: number) => {
+  const updateValue = (clientX: number) => {
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     const newValue = Math.round((x / rect.width) * (max - min) + min);
     setCurrentValue(newValue);
     onChange?.(newValue);
-  }, [max, min, onChange]);
+  };
 
   useEffect(() => {
     if (!isDragging) return;
@@ -455,7 +272,7 @@ function GlassSlider({
       
       <div
         ref={trackRef}
-        className="relative h-10 cursor-pointer"
+        className="relative h-8 cursor-pointer group"
         onMouseDown={(e) => { setIsDragging(true); updateValue(e.clientX); }}
       >
         {/* Track */}
@@ -470,24 +287,29 @@ function GlassSlider({
             className="absolute inset-y-0 left-0 transition-[width] duration-75"
             style={{
               width: `${percentage}%`,
-              background: `linear-gradient(90deg, 
-                rgba(59, 130, 246, ${0.7 + params.fresnel * 0.2}), 
-                rgba(147, 51, 234, ${0.7 + params.fresnel * 0.2}))`,
-              boxShadow: `0 0 ${10 + params.glare * 10}px rgba(59, 130, 246, ${0.3 + params.glare * 0.2})`,
+              background: 'linear-gradient(90deg, rgba(99, 102, 241, 0.8), rgba(168, 85, 247, 0.8))',
+              boxShadow: '0 0 15px rgba(99, 102, 241, 0.4)',
             }}
           />
         </div>
         
-        {/* WebGL Glass Thumb - just a positioned div that gets rendered by WebGL */}
+        {/* CSS Glass Thumb */}
         <div
-          ref={thumbRef}
-          className="absolute top-1/2 transition-transform duration-75"
+          className="absolute top-1/2 transition-all duration-75"
           style={{
             left: `${percentage}%`,
-            width: isDragging ? 32 : 28,
-            height: isDragging ? 32 : 28,
+            width: isDragging ? 28 : 24,
+            height: isDragging ? 28 : 24,
             transform: `translate(-50%, -50%) scale(${isDragging ? 1.1 : 1})`,
             borderRadius: '50%',
+            background: 'rgba(255, 255, 255, 0.2)',
+            backdropFilter: 'blur(10px)',
+            border: '2px solid rgba(255, 255, 255, 0.4)',
+            boxShadow: `
+              0 4px 12px rgba(0, 0, 0, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.4),
+              0 0 20px rgba(99, 102, 241, ${isDragging ? 0.5 : 0.2})
+            `,
           }}
         />
       </div>
@@ -496,10 +318,8 @@ function GlassSlider({
 }
 
 // =============================================
-// ANIMATED TAB BAR
+// CSS GLASS TABS
 // =============================================
-let tabIdCounter = 0;
-
 function GlassTabs({ 
   tabs, 
   activeTab, 
@@ -509,10 +329,7 @@ function GlassTabs({
   activeTab: string;
   onChange: (id: string) => void;
 }) {
-  const { registerElement, unregisterElement } = useGlass();
   const containerRef = useRef<HTMLDivElement>(null);
-  const indicatorRef = useRef<HTMLDivElement>(null);
-  const idRef = useRef(`tab-indicator-${++tabIdCounter}`);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   
   useEffect(() => {
@@ -526,36 +343,22 @@ function GlassTabs({
     }
   }, [activeTab]);
 
-  // Register indicator with WebGL
-  useEffect(() => {
-    const indicator = indicatorRef.current;
-    if (!indicator) return;
-
-    const updateRect = () => {
-      registerElement(idRef.current, indicator, 12);
-    };
-
-    const timeout = setTimeout(updateRect, 50); // Wait for position to settle
-    const interval = setInterval(updateRect, 100);
-
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-      unregisterElement(idRef.current);
-    };
-  }, [registerElement, unregisterElement, indicatorStyle]);
-
   return (
     <GlassPanel padding="p-1.5" className="inline-block" borderRadius={20}>
       <div ref={containerRef} className="relative flex gap-1">
-        {/* Sliding WebGL glass indicator */}
+        {/* Sliding glass indicator */}
         <div
-          ref={indicatorRef}
           className="absolute top-0 bottom-0 transition-all duration-500 ease-out"
           style={{
             left: indicatorStyle.left,
             width: indicatorStyle.width,
             borderRadius: 12,
+            background: 'rgba(255, 255, 255, 0.15)',
+            backdropFilter: 'blur(10px)',
+            boxShadow: `
+              0 2px 10px rgba(0, 0, 0, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2)
+            `,
           }}
         />
         
@@ -577,7 +380,78 @@ function GlassTabs({
 }
 
 // =============================================
-// FAVICON ICON
+// LIQUID CURSOR - CSS Glass Effect
+// =============================================
+function LiquidCursor() {
+  const [pos, setPos] = useState({ x: -100, y: -100 });
+  const [visible, setVisible] = useState(false);
+  const [isClicking, setIsClicking] = useState(false);
+  
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setPos({ x: e.clientX, y: e.clientY });
+      setVisible(true);
+    };
+    
+    const handleMouseDown = () => setIsClicking(true);
+    const handleMouseUp = () => setIsClicking(false);
+    const handleMouseLeave = () => setVisible(false);
+    const handleMouseEnter = () => setVisible(true);
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseleave', handleMouseLeave);
+    document.addEventListener('mouseenter', handleMouseEnter);
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+      document.removeEventListener('mouseenter', handleMouseEnter);
+    };
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <>
+      {/* Main cursor */}
+      <div
+        className="fixed pointer-events-none z-[9998] transition-transform duration-75"
+        style={{
+          left: pos.x - 16,
+          top: pos.y - 16,
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255, 255, 255, 0.3)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+          transform: `scale(${isClicking ? 0.8 : 1})`,
+        }}
+      />
+      {/* Trail glow */}
+      <div
+        className="fixed pointer-events-none z-[9997]"
+        style={{
+          left: pos.x - 40,
+          top: pos.y - 40,
+          width: 80,
+          height: 80,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 70%)',
+          filter: 'blur(10px)',
+        }}
+      />
+    </>
+  );
+}
+
+// =============================================
+// GLACIER ICON
 // =============================================
 function GlacierIcon({ className = '' }: { className?: string }) {
   return (
@@ -619,82 +493,17 @@ function GlacierIcon({ className = '' }: { className?: string }) {
 }
 
 // =============================================
-// LIQUID GLASS CURSOR
-// =============================================
-let cursorIdCounter = 0;
-
-function LiquidCursor() {
-  const { registerElement, unregisterElement } = useGlass();
-  const [pos, setPos] = useState({ x: -100, y: -100 });
-  const [visible, setVisible] = useState(false);
-  const cursorRef = useRef<HTMLDivElement>(null);
-  const idRef = useRef(`cursor-${++cursorIdCounter}`);
-  
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setPos({ x: e.clientX, y: e.clientY });
-      setVisible(true);
-    };
-    
-    const handleMouseLeave = () => setVisible(false);
-    const handleMouseEnter = () => setVisible(true);
-    
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseleave', handleMouseLeave);
-    document.addEventListener('mouseenter', handleMouseEnter);
-    
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseleave', handleMouseLeave);
-      document.removeEventListener('mouseenter', handleMouseEnter);
-    };
-  }, []);
-
-  // Register cursor with WebGL
-  useEffect(() => {
-    const cursor = cursorRef.current;
-    if (!cursor || !visible) return;
-
-    const updateRect = () => {
-      registerElement(idRef.current, cursor, 50);
-    };
-
-    updateRect();
-
-    return () => {
-      unregisterElement(idRef.current);
-    };
-  }, [registerElement, unregisterElement, pos, visible]);
-
-  if (!visible) return null;
-
-  return (
-    <div
-      ref={cursorRef}
-      className="fixed pointer-events-none z-[9998]"
-      style={{
-        left: pos.x - 16,
-        top: pos.y - 16,
-        width: 32,
-        height: 32,
-        borderRadius: '50%',
-      }}
-    />
-  );
-}
-
-// =============================================
-// GLASS CONTROLS
+// GLASS CONTROLS - Parameter sliders for WebGL demos
 // =============================================
 function GlassControls() {
   const { params, setParams } = useGlass();
   
   return (
-    <GlassPanel className="sticky top-4" borderRadius={24}>
+    <GlassPanel className="sticky top-4" borderRadius={24} intensity="heavy">
       <h3 className="text-white font-semibold mb-4 text-lg flex items-center gap-2">
-        <span className="text-xl">🎛️</span> Global Glass Parameters
+        <span className="text-xl">🎛️</span> Glass Parameters
       </h3>
-      <p className="text-white/50 text-xs mb-6">Controls affect ALL glass on this page</p>
+      <p className="text-white/50 text-xs mb-6">Adjust the WebGL liquid glass demos</p>
       <div className="space-y-5">
         <GlassSlider
           label="Refraction"
@@ -708,7 +517,7 @@ function GlassControls() {
           label="Dispersion"
           value={params.dispersion}
           min={0}
-          max={20}
+          max={25}
           onChange={(v) => setParams({ dispersion: v })}
           showValue
         />
@@ -755,41 +564,19 @@ function GlassControls() {
 function App() {
   const [activeTab, setActiveTab] = useState('liquid');
   const [glassParams, setGlassParams] = useState<GlassParams>({
-    refraction: 1.4,
-    dispersion: 7,
+    refraction: 1.52,
+    dispersion: 12,
     blur: 0,
-    fresnel: 0.5,
-    glare: 0.4,
+    fresnel: 0.6,
+    glare: 0.3,
     roundness: 0.8,
   });
-  
-  const [elements, setElements] = useState<Map<string, GlassElement>>(new Map());
 
-  const registerElement = useCallback((id: string, element: HTMLElement, borderRadius = 24) => {
-    const rect = element.getBoundingClientRect();
-    setElements(prev => {
-      const next = new Map(prev);
-      next.set(id, { id, rect, borderRadius });
-      return next;
-    });
-  }, []);
-
-  const unregisterElement = useCallback((id: string) => {
-    setElements(prev => {
-      const next = new Map(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  const contextValue = useMemo(() => ({
+  const contextValue = {
     params: glassParams,
     setParams: (newParams: Partial<GlassParams>) => 
       setGlassParams(prev => ({ ...prev, ...newParams })),
-    registerElement,
-    unregisterElement,
-    elements,
-  }), [glassParams, registerElement, unregisterElement, elements]);
+  };
 
   const tabs = [
     { id: 'liquid', label: 'Liquid Glass', icon: '🔮' },
@@ -799,19 +586,12 @@ function App() {
 
   return (
     <GlassContext.Provider value={contextValue}>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden cursor-none">
-        {/* Shared WebGL renderer - ONE context for all glass */}
-        <SharedGlassRenderer />
+      <div className="min-h-screen relative overflow-hidden cursor-none">
+        {/* Animated Background */}
+        <AnimatedBackground />
         
         {/* Liquid Glass Cursor */}
         <LiquidCursor />
-        
-        {/* Animated background */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 -left-20 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
-        </div>
 
         {/* Header */}
         <header className="relative z-10 py-8 px-6">
@@ -839,8 +619,8 @@ function App() {
               <span className="text-white/90">for Everyone</span>
             </h2>
             <p className="text-xl text-white/70 max-w-2xl mx-auto mb-12">
-              Real-time WebGL refraction, dispersion, and fresnel effects. 
-              Inspired by Apple's visionOS and iOS design language.
+              Real WebGL refraction, chromatic dispersion, and edge fresnel effects. 
+              Inspired by Apple's visionOS liquid glass design language.
             </p>
             
             <GlassTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -851,12 +631,12 @@ function App() {
         <main className="relative z-10 px-6 pb-20">
           <div className="max-w-7xl mx-auto">
             
-            {/* LIQUID GLASS TAB */}
+            {/* LIQUID GLASS TAB - WebGL demos */}
             {activeTab === 'liquid' && (
               <div className="space-y-12 animate-fade-in">
                 <div className="grid lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
-                    <GlassPanel padding="p-2" borderRadius={24}>
+                    <GlassPanel padding="p-3" borderRadius={28} intensity="light">
                       <div className="rounded-2xl overflow-hidden">
                         <LiquidGlass
                           width={800}
@@ -872,7 +652,7 @@ function App() {
                         />
                       </div>
                       <p className="text-white/50 text-sm text-center mt-3 mb-1">
-                        Move your mouse to interact with the glass
+                        ✨ Real WebGL refraction — Move your mouse to interact
                       </p>
                     </GlassPanel>
                   </div>
@@ -883,18 +663,18 @@ function App() {
                 </div>
 
                 <div>
-                  <h3 className="text-2xl font-bold text-white mb-6">Different Backgrounds</h3>
+                  <h3 className="text-2xl font-bold text-white mb-6">Different Backgrounds — See Real Refraction</h3>
                   <div className="grid md:grid-cols-3 gap-6">
                     {[
-                      'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=600&q=80',
-                      'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=600&q=80',
-                      'https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=600&q=80',
+                      { url: 'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=600&q=80', label: 'Mountains' },
+                      { url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=600&q=80', label: 'Valley' },
+                      { url: 'https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=600&q=80', label: 'Abstract' },
                     ].map((bg, i) => (
-                      <GlassPanel key={i} padding="p-2" borderRadius={24}>
+                      <GlassPanel key={i} padding="p-2" borderRadius={24} intensity="light">
                         <LiquidGlass
                           width={350}
                           height={250}
-                          backgroundImage={bg}
+                          backgroundImage={bg.url}
                           refraction={glassParams.refraction}
                           dispersion={glassParams.dispersion}
                           blur={glassParams.blur}
@@ -902,8 +682,9 @@ function App() {
                           glare={glassParams.glare}
                           roundness={glassParams.roundness}
                           interactive
-                          shapeSize={[0.5, 0.45]}
+                          shapeSize={[0.55, 0.5]}
                         />
+                        <p className="text-white/40 text-xs text-center mt-2">{bg.label}</p>
                       </GlassPanel>
                     ))}
                   </div>
@@ -942,11 +723,11 @@ module.exports = {
                       <h3 className="text-2xl font-bold text-white mb-6">Glass Intensities</h3>
                       <div className="grid gap-6">
                         {[
-                          { title: 'Subtle', desc: 'Light refraction, perfect for overlays' },
-                          { title: 'Standard', desc: 'Balanced glass effect for cards' },
-                          { title: 'Heavy', desc: 'Maximum glass distortion for impact' },
+                          { title: 'Light Glass', desc: 'Subtle blur, perfect for overlays and modals', intensity: 'light' as const },
+                          { title: 'Normal Glass', desc: 'Balanced glass effect for cards and panels', intensity: 'normal' as const },
+                          { title: 'Heavy Glass', desc: 'Maximum blur and presence for key UI elements', intensity: 'heavy' as const },
                         ].map((item, i) => (
-                          <GlassPanel key={i} borderRadius={24}>
+                          <GlassPanel key={i} borderRadius={24} intensity={item.intensity}>
                             <h4 className="text-white font-semibold text-lg mb-2">{item.title}</h4>
                             <p className="text-white/70 text-sm">{item.desc}</p>
                           </GlassPanel>
@@ -955,35 +736,22 @@ module.exports = {
                     </div>
 
                     <div>
-                      <h3 className="text-2xl font-bold text-white mb-6">Interactive Demo</h3>
-                      <div className="relative h-[400px] rounded-3xl overflow-hidden">
-                        <div 
-                          className="absolute inset-0"
-                          style={{
-                            background: 'linear-gradient(45deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
-                            backgroundSize: '400% 400%',
-                            animation: 'gradient-shift 8s ease infinite',
-                          }}
+                      <h3 className="text-2xl font-bold text-white mb-6">WebGL Refraction Demo</h3>
+                      <GlassPanel padding="p-3" borderRadius={28} intensity="light">
+                        <LiquidGlass
+                          width={600}
+                          height={400}
+                          backgroundImage="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1200&q=80"
+                          refraction={glassParams.refraction}
+                          dispersion={glassParams.dispersion}
+                          blur={glassParams.blur}
+                          fresnel={glassParams.fresnel}
+                          glare={glassParams.glare}
+                          roundness={glassParams.roundness}
+                          interactive
+                          shapeSize={[0.6, 0.55]}
                         />
-                        
-                        <div className="absolute inset-8 grid grid-cols-2 gap-6">
-                          <GlassPanel className="flex flex-col justify-between" borderRadius={24}>
-                            <div>
-                              <h4 className="text-white font-semibold text-lg mb-2">Dynamic Glass</h4>
-                              <p className="text-white/70 text-sm">Real-time parameter changes affect all glass.</p>
-                            </div>
-                            <LiquidButton variant="secondary" size="sm">Learn More</LiquidButton>
-                          </GlassPanel>
-                          
-                          <GlassPanel className="flex flex-col justify-between" borderRadius={24}>
-                            <div>
-                              <h4 className="text-white font-semibold text-lg mb-2">Global Controls</h4>
-                              <p className="text-white/70 text-sm">One slider changes everything.</p>
-                            </div>
-                            <LiquidButton variant="primary" size="sm">Get Started</LiquidButton>
-                          </GlassPanel>
-                        </div>
-                      </div>
+                      </GlassPanel>
                     </div>
                   </div>
                   
@@ -1019,7 +787,7 @@ module.exports = {
                       <GlassPanel borderRadius={24}>
                         <div className="grid md:grid-cols-2 gap-8">
                           <div>
-                            <h4 className="text-white/80 font-medium mb-4">Liquid Glass Toggle</h4>
+                            <h4 className="text-white/80 font-medium mb-4">Glass Toggle</h4>
                             <div className="space-y-4">
                               {['sm', 'md', 'lg'].map((size) => (
                                 <div key={size} className="flex items-center justify-between">
@@ -1033,7 +801,7 @@ module.exports = {
                           </div>
                           
                           <div>
-                            <h4 className="text-white/80 font-medium mb-4">Liquid Glass Checkbox</h4>
+                            <h4 className="text-white/80 font-medium mb-4">Glass Checkbox</h4>
                             <div className="space-y-3">
                               <LiquidCheckbox label="Enable notifications" checked />
                               <LiquidCheckbox label="Auto-save drafts" />
@@ -1046,7 +814,7 @@ module.exports = {
 
                     {/* Sliders */}
                     <div>
-                      <h3 className="text-2xl font-bold text-white mb-6">Sliders (WebGL Glass Thumb)</h3>
+                      <h3 className="text-2xl font-bold text-white mb-6">Glass Sliders</h3>
                       <GlassPanel borderRadius={24}>
                         <div className="grid md:grid-cols-2 gap-8">
                           <div className="space-y-6">
@@ -1106,7 +874,7 @@ module.exports = {
                     {/* Form */}
                     <div>
                       <h3 className="text-2xl font-bold text-white mb-6">Complete Form</h3>
-                      <GlassPanel className="max-w-xl mx-auto" borderRadius={24}>
+                      <GlassPanel className="max-w-xl mx-auto" borderRadius={24} intensity="heavy">
                         <h4 className="text-white font-semibold text-xl mb-6 text-center">Create Account</h4>
                         <div className="space-y-4">
                           <LiquidInput placeholder="Full Name" />
@@ -1152,11 +920,65 @@ module.exports = {
           </div>
         </footer>
 
+        {/* Global Styles */}
         <style>{`
-          @keyframes gradient-shift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+          @keyframes float-slow {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(30px, -30px) scale(1.05); }
+          }
+          
+          @keyframes float-slow-reverse {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-30px, 30px) scale(1.05); }
+          }
+          
+          @keyframes float-medium {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(20px, -15px); }
+            66% { transform: translate(-10px, 10px); }
+          }
+          
+          @keyframes float-random {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+            25% { transform: translate(15px, -20px) scale(1.1); opacity: 0.8; }
+            50% { transform: translate(-10px, -10px) scale(0.95); opacity: 0.5; }
+            75% { transform: translate(20px, 15px) scale(1.05); opacity: 0.7; }
+          }
+          
+          @keyframes streak {
+            0% { transform: translateX(0); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateX(200%); opacity: 0; }
+          }
+          
+          @keyframes twinkle {
+            0%, 100% { opacity: 0.2; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.5); }
+          }
+          
+          .animate-float-slow {
+            animation: float-slow 20s ease-in-out infinite;
+          }
+          
+          .animate-float-slow-reverse {
+            animation: float-slow-reverse 25s ease-in-out infinite;
+          }
+          
+          .animate-float-medium {
+            animation: float-medium 15s ease-in-out infinite;
+          }
+          
+          .animate-float-random {
+            animation: float-random 20s ease-in-out infinite;
+          }
+          
+          .animate-streak {
+            animation: streak 10s linear infinite;
+          }
+          
+          .animate-twinkle {
+            animation: twinkle 4s ease-in-out infinite;
           }
           
           .animate-fade-in {
