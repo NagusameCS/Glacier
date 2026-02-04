@@ -633,6 +633,7 @@ function GlassControls() {
 // =============================================
 function App() {
   const [activeTab, setActiveTab] = useState('liquid');
+  const [fullscreenDemo, setFullscreenDemo] = useState(false);
   const [glassParams, setGlassParams] = useState<GlassParams>({
     refraction: 1.52,
     dispersion: 12,
@@ -644,6 +645,28 @@ function App() {
     shapeWidth: 0.5,
     shapeHeight: 0.45,
   });
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && fullscreenDemo) {
+        setFullscreenDemo(false);
+      }
+      if (e.key === 'f' && !fullscreenDemo && activeTab === 'liquid') {
+        setFullscreenDemo(true);
+      }
+      // Number keys for presets
+      const presetKeys = ['1', '2', '3', '4', '5'];
+      const presetNames = Object.keys(GLASS_PRESETS) as (keyof typeof GLASS_PRESETS)[];
+      const keyIndex = presetKeys.indexOf(e.key);
+      if (keyIndex !== -1 && presetNames[keyIndex]) {
+        setGlassParams(prev => ({ ...prev, ...GLASS_PRESETS[presetNames[keyIndex]] }));
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [fullscreenDemo, activeTab]);
 
   const contextValue = {
     params: glassParams,
@@ -659,7 +682,37 @@ function App() {
 
   return (
     <GlassContext.Provider value={contextValue}>
-      <div className="min-h-screen relative overflow-hidden cursor-none">
+      {/* Fullscreen Demo Mode */}
+      {fullscreenDemo && (
+        <div className="fixed inset-0 z-50 bg-black">
+          <AnimatedBackground />
+          <LiquidGlass
+            width={window.innerWidth}
+            height={window.innerHeight}
+            refraction={glassParams.refraction}
+            dispersion={glassParams.dispersion}
+            blur={glassParams.blur}
+            fresnel={glassParams.fresnel}
+            glare={glassParams.glare}
+            roundness={glassParams.roundness}
+            liquidWobble={glassParams.liquidWobble}
+            shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
+            backgroundImage="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80"
+            interactive
+          />
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+            <GlassPanel padding="px-6 py-3" borderRadius={16}>
+              <div className="flex items-center gap-4 text-white/70 text-sm">
+                <span>Press <kbd className="px-2 py-0.5 bg-white/20 rounded">ESC</kbd> to exit</span>
+                <span className="text-white/30">|</span>
+                <span>Keys <kbd className="px-2 py-0.5 bg-white/20 rounded">1-5</kbd> for presets</span>
+              </div>
+            </GlassPanel>
+          </div>
+        </div>
+      )}
+
+      <div className={`min-h-screen relative overflow-hidden cursor-none ${fullscreenDemo ? 'hidden' : ''}`}>
         {/* Animated Background */}
         <AnimatedBackground />
         
@@ -729,6 +782,19 @@ function App() {
                       <p className="text-white/50 text-sm text-center mt-3 mb-1">
                         ✨ Real WebGL refraction — Move your mouse to interact
                       </p>
+                      <div className="flex justify-center mt-2">
+                        <button
+                          onClick={() => setFullscreenDemo(true)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:text-white
+                            bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                              d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          </svg>
+                          Fullscreen (F)
+                        </button>
+                      </div>
                     </GlassPanel>
                   </div>
                   
