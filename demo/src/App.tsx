@@ -23,7 +23,18 @@ interface GlassParams {
   shapeHeight: number;
   tintColor: string;
   tintIntensity: number;
+  backgroundId: number;
 }
+
+// Background image options
+const BACKGROUND_IMAGES = [
+  { id: 0, url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80', label: 'Mountains' },
+  { id: 1, url: 'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=1200&q=80', label: 'Aurora' },
+  { id: 2, url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1200&q=80', label: 'Valley' },
+  { id: 3, url: 'https://images.unsplash.com/photo-1518173946687-a4c036bc613d?w=1200&q=80', label: 'Galaxy' },
+  { id: 4, url: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200&q=80', label: 'Gradient' },
+  { id: 5, url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200&q=80', label: 'Abstract' },
+];
 
 interface GlassContextType {
   params: GlassParams;
@@ -35,7 +46,8 @@ const GlassContext = createContext<GlassContextType>({
     refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, 
     glare: 0.3, roundness: 0.8, liquidWobble: 0.4,
     shapeWidth: 0.5, shapeHeight: 0.45,
-    tintColor: '#88ccff', tintIntensity: 0.15
+    tintColor: '#88ccff', tintIntensity: 0.15,
+    backgroundId: 0
   },
   setParams: () => {},
 });
@@ -63,6 +75,13 @@ function hexToRgba(hex: string, alpha: number): [number, number, number, number]
     ];
   }
   return [1, 1, 1, 0]; // Default to transparent white
+}
+
+// Helper to get background URL by ID
+function getBackgroundUrl(id: number, size: 'small' | 'medium' | 'large' = 'medium'): string {
+  const bg = BACKGROUND_IMAGES.find(b => b.id === id) || BACKGROUND_IMAGES[0];
+  const widthMap = { small: 600, medium: 1200, large: 1920 };
+  return bg.url.replace(/w=\d+/, `w=${widthMap[size]}`);
 }
 
 // =============================================
@@ -669,6 +688,33 @@ function GlassControls() {
           showValue
         />
       </div>
+
+      {/* Background Picker */}
+      <div className="mt-6 pt-4 border-t border-white/10">
+        <p className="text-white/50 text-xs mb-3">Background Image</p>
+        <div className="grid grid-cols-3 gap-2">
+          {BACKGROUND_IMAGES.map((bg) => (
+            <button
+              key={bg.id}
+              onClick={() => setParams({ backgroundId: bg.id })}
+              className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
+                params.backgroundId === bg.id 
+                  ? 'border-white scale-105 shadow-lg' 
+                  : 'border-white/20 hover:border-white/50'
+              }`}
+            >
+              <img 
+                src={bg.url.replace('w=1200', 'w=120')} 
+                alt={bg.label}
+                className="w-full h-full object-cover"
+              />
+              <span className="absolute bottom-0 inset-x-0 bg-black/50 text-white/80 text-[8px] py-0.5 text-center">
+                {bg.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
     </GlassPanel>
   );
 }
@@ -691,6 +737,7 @@ function App() {
     shapeHeight: 0.45,
     tintColor: '#88ccff',
     tintIntensity: 0.15,
+    backgroundId: 0,
   });
 
   // Keyboard shortcuts
@@ -745,7 +792,7 @@ function App() {
             liquidWobble={glassParams.liquidWobble}
             shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
             tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
-            backgroundImage="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80"
+            backgroundImage={getBackgroundUrl(glassParams.backgroundId, 'large')}
             interactive
           />
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
@@ -824,7 +871,7 @@ function App() {
                           liquidWobble={glassParams.liquidWobble}
                           shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
                           tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
-                          backgroundImage="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80"
+                          backgroundImage={getBackgroundUrl(glassParams.backgroundId, 'medium')}
                           interactive
                         />
                       </div>
