@@ -18,6 +18,7 @@ interface GlassParams {
   fresnel: number;
   glare: number;
   roundness: number;
+  liquidWobble: number;
 }
 
 interface GlassContextType {
@@ -26,7 +27,7 @@ interface GlassContextType {
 }
 
 const GlassContext = createContext<GlassContextType>({
-  params: { refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, glare: 0.3, roundness: 0.8 },
+  params: { refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, glare: 0.3, roundness: 0.8, liquidWobble: 0.4 },
   setParams: () => {},
 });
 
@@ -553,6 +554,14 @@ function GlassControls() {
           onChange={(v) => setParams({ roundness: v / 100 })}
           showValue
         />
+        <GlassSlider
+          label="Liquid Wobble"
+          value={Math.round(params.liquidWobble * 100)}
+          min={0}
+          max={100}
+          onChange={(v) => setParams({ liquidWobble: v / 100 })}
+          showValue
+        />
       </div>
     </GlassPanel>
   );
@@ -570,6 +579,7 @@ function App() {
     fresnel: 0.6,
     glare: 0.3,
     roundness: 0.8,
+    liquidWobble: 0.4,
   });
 
   const contextValue = {
@@ -647,6 +657,7 @@ function App() {
                           fresnel={glassParams.fresnel}
                           glare={glassParams.glare}
                           roundness={glassParams.roundness}
+                          liquidWobble={glassParams.liquidWobble}
                           backgroundImage="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80"
                           interactive
                         />
@@ -681,6 +692,7 @@ function App() {
                           fresnel={glassParams.fresnel}
                           glare={glassParams.glare}
                           roundness={glassParams.roundness}
+                          liquidWobble={glassParams.liquidWobble}
                           interactive
                           shapeSize={[0.55, 0.5]}
                         />
@@ -748,6 +760,7 @@ module.exports = {
                           fresnel={glassParams.fresnel}
                           glare={glassParams.glare}
                           roundness={glassParams.roundness}
+                          liquidWobble={glassParams.liquidWobble}
                           interactive
                           shapeSize={[0.6, 0.55]}
                         />

@@ -44,21 +44,61 @@ uniform vec4 u_tint;
 uniform float u_roundness;
 uniform vec2 u_shapeSize;
 uniform vec2 u_shapePos;
+uniform float u_liquidWobble;
 
-// SDF for superellipse (squircle)
-float sdSuperellipse(vec2 p, vec2 size, float n) {
-  p = p / size;
+// Noise functions for liquid wobble
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  for (int i = 0; i < 4; i++) {
+    value += amplitude * noise(p);
+    p *= 2.0;
+    amplitude *= 0.5;
+  }
+  return value;
+}
+
+// SDF for superellipse (squircle) with liquid wobble
+float sdSuperellipse(vec2 p, vec2 size, float n, float wobble) {
+  // Add liquid wobble distortion
+  float angle = atan(p.y, p.x);
+  float wobbleAmount = wobble * 8.0;
+  float wobbleOffset = sin(angle * 3.0 + u_time * 2.0) * wobbleAmount
+                     + sin(angle * 5.0 - u_time * 1.5) * wobbleAmount * 0.5
+                     + sin(angle * 7.0 + u_time * 3.0) * wobbleAmount * 0.25;
+  
+  // Add noise-based organic wobble
+  wobbleOffset += fbm(vec2(angle * 2.0, u_time * 0.5)) * wobbleAmount * 0.8;
+  
+  p = p / (size + wobbleOffset);
   vec2 ps = abs(p);
   float gm = pow(ps.x, n) + pow(ps.y, n);
   return (pow(gm, 1.0 / n) - 1.0) * min(size.x, size.y);
 }
 
 // Get normal from SDF (surface curvature direction)
-vec2 getNormal(vec2 p, vec2 size, float n) {
+vec2 getNormal(vec2 p, vec2 size, float n, float wobble) {
   float eps = 0.5;
-  float d = sdSuperellipse(p, size, n);
-  float dx = sdSuperellipse(p + vec2(eps, 0.0), size, n) - d;
-  float dy = sdSuperellipse(p + vec2(0.0, eps), size, n) - d;
+  float d = sdSuperellipse(p, size, n, wobble);
+  float dx = sdSuperellipse(p + vec2(eps, 0.0), size, n, wobble) - d;
+  float dy = sdSuperellipse(p + vec2(0.0, eps), size, n, wobble) - d;
   return normalize(vec2(dx, dy));
 }
 
@@ -88,10 +128,10 @@ void main() {
   vec2 shapeCenter = u_resolution * 0.5 + u_shapePos * u_resolution;
   vec2 p = pixelPos - shapeCenter;
   
-  // Calculate SDF - squircle shape
+  // Calculate SDF - squircle shape with liquid wobble
   float n = 2.0 + u_roundness * 4.0;
   vec2 size = u_shapeSize * u_resolution * 0.5;
-  float sd = sdSuperellipse(p, size, n);
+  float sd = sdSuperellipse(p, size, n, u_liquidWobble);
   
   // Get glass thickness
   float minSize = min(size.x, size.y);
@@ -105,7 +145,12 @@ void main() {
     float normalizedDepth = clamp(depth / thickness, 0.0, 1.0);
     
     // Get surface normal for refraction direction
-    vec2 normal = getNormal(p, size, n);
+    vec2 normal = getNormal(p, size, n, u_liquidWobble);
+    
+    // === LIQUID CAUSTICS ===
+    // Simulate light focusing through the curved glass
+    float causticNoise = fbm(p * 0.02 + u_time * 0.3);
+    float caustics = pow(causticNoise, 2.0) * normalizedDepth * 0.15;
     
     // === REFRACTION ===
     // Calculate refraction using Snell's law approximation
@@ -115,8 +160,11 @@ void main() {
     // Refraction strength based on IOR
     float refractionStrength = (u_refFactor - 1.0) * 0.15;
     
+    // Add liquid wobble to refraction
+    float wobbleRefraction = sin(u_time * 2.0 + length(p) * 0.05) * u_liquidWobble * 0.02;
+    
     // Base refraction offset
-    vec2 refractionOffset = normal * edgeFactor * refractionStrength;
+    vec2 refractionOffset = normal * edgeFactor * (refractionStrength + wobbleRefraction);
     
     // Chromatic dispersion - different wavelengths refract differently
     float dispersionOffset = u_refDispersion * 0.003 * edgeFactor;
@@ -138,6 +186,9 @@ void main() {
     vec4 colorB = blurredSample(u_background, uvB, blurAmount);
     
     vec4 refractedColor = vec4(colorR.r, colorG.g, colorB.b, 1.0);
+    
+    // Add caustic highlights
+    refractedColor.rgb += vec3(caustics * 0.8, caustics * 0.9, caustics);
     
     // === FRESNEL - Edge reflection only ===
     // Fresnel effect: more reflection at grazing angles (edges)
@@ -209,6 +260,7 @@ interface LiquidGlassProps {
   glare?: number;
   glareAngle?: number;
   thickness?: number;
+  liquidWobble?: number;
 }
 
 export function LiquidGlass({
@@ -227,6 +279,7 @@ export function LiquidGlass({
   glare = 0.4,
   glareAngle = 0.8,
   thickness = 25,
+  liquidWobble = 0.3,
 }: LiquidGlassProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<WebGL2RenderingContext | null>(null);
@@ -407,6 +460,7 @@ export function LiquidGlass({
       setUniform('u_roundness', '1f', roundness);
       setUniform('u_shapeSize', '2f', shapeSize);
       setUniform('u_shapePos', '2f', [mouseRef.current.x * 0.2, -mouseRef.current.y * 0.2]);
+      setUniform('u_liquidWobble', '1f', liquidWobble);
       
       // Bind texture
       gl.activeTexture(gl.TEXTURE0);
@@ -423,7 +477,7 @@ export function LiquidGlass({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [isReady, shapeSize, roundness, refraction, dispersion, blur, tint, fresnel, glare, glareAngle, thickness]);
+  }, [isReady, shapeSize, roundness, refraction, dispersion, blur, tint, fresnel, glare, glareAngle, thickness, liquidWobble]);
 
   // Mouse interaction
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
