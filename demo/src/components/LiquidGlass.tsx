@@ -296,17 +296,24 @@ export function LiquidGlass({
     gl.bindTexture(gl.TEXTURE_2D, bgTexture);
     
     // Load background image
+    let isMounted = true;
     const loadBackground = () => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
-        gl.bindTexture(gl.TEXTURE_2D, bgTexture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        setIsReady(true);
+        // Check if component is still mounted and context is valid
+        if (!isMounted || !glRef.current || !bgTextureRef.current) return;
+        try {
+          gl.bindTexture(gl.TEXTURE_2D, bgTexture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          setIsReady(true);
+        } catch (e) {
+          // Context was lost, ignore
+        }
       };
       img.src = backgroundImage || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80';
     };
@@ -315,11 +322,21 @@ export function LiquidGlass({
 
     // Cleanup
     return () => {
+      isMounted = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      gl.deleteProgram(program);
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-      gl.deleteTexture(bgTexture);
+      // Clear refs before deleting to prevent async callbacks from using deleted objects
+      const oldTexture = bgTextureRef.current;
+      bgTextureRef.current = null;
+      glRef.current = null;
+      programRef.current = null;
+      try {
+        gl.deleteProgram(program);
+        gl.deleteShader(vertexShader);
+        gl.deleteShader(fragmentShader);
+        if (oldTexture) gl.deleteTexture(oldTexture);
+      } catch (e) {
+        // Context may already be lost
+      }
     };
   }, [createShader, backgroundImage]);
 
