@@ -866,21 +866,6 @@ function App() {
         {/* Liquid Glass Cursor */}
         <LiquidCursor />
 
-        {/* Header */}
-        <header className="relative z-10 py-8 px-6">
-          <div className="max-w-7xl mx-auto">
-            <GlassPanel padding="px-6 py-4" className="inline-block" borderRadius={20}>
-              <div className="flex items-center gap-4">
-                <GlacierIcon className="w-12 h-12" />
-                <div>
-                  <h1 className="text-2xl font-bold text-white">Glacier</h1>
-                  <p className="text-white/60 text-sm">Apple Liquid Glass for the Web</p>
-                </div>
-              </div>
-            </GlassPanel>
-          </div>
-        </header>
-
         {/* Hero */}
         <section className="relative z-10 py-12 px-6">
           <div className="max-w-7xl mx-auto text-center">
