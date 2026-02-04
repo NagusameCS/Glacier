@@ -553,6 +553,24 @@ function GlassControls() {
   const applyPreset = (presetName: keyof typeof GLASS_PRESETS) => {
     setParams(GLASS_PRESETS[presetName]);
   };
+
+  const randomize = () => {
+    const randomColor = ['#ffffff', '#88ccff', '#ff88cc', '#88ffcc', '#ffcc88', '#cc88ff'][Math.floor(Math.random() * 6)];
+    setParams({
+      refraction: 1.2 + Math.random() * 0.8,
+      dispersion: Math.random() * 25,
+      blur: Math.random() * 12,
+      fresnel: Math.random(),
+      glare: Math.random() * 0.8,
+      roundness: 0.3 + Math.random() * 0.7,
+      liquidWobble: Math.random() * 0.8,
+      shapeWidth: 0.25 + Math.random() * 0.5,
+      shapeHeight: 0.25 + Math.random() * 0.45,
+      tintColor: randomColor,
+      tintIntensity: Math.random() * 0.35,
+      backgroundId: Math.floor(Math.random() * BACKGROUND_IMAGES.length),
+    });
+  };
   
   return (
     <GlassPanel className="sticky top-4" borderRadius={24} intensity="heavy">
@@ -575,6 +593,14 @@ function GlassControls() {
               {preset}
             </button>
           ))}
+          <button
+            onClick={randomize}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all
+              bg-gradient-to-r from-purple-500/30 to-pink-500/30 hover:from-purple-500/50 hover:to-pink-500/50 
+              text-white/80 hover:text-white border border-white/20 hover:border-white/40"
+          >
+            🎲 Random
+          </button>
         </div>
       </div>
 
