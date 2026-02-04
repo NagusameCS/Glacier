@@ -1,0 +1,539 @@
+/**
+ * Glacier CSS
+ * Main stylesheet for Glacier liquid glass effects
+ * Import this file to get all Glacier styles
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================================
+   ROOT VARIABLES
+   ================================================ */
+
+:root {
+  /* Glass properties */
+  --glacier-blur: 12px;
+  --glacier-opacity: 0.15;
+  --glacier-saturation: 180%;
+  --glacier-tint-opacity: 0.1;
+  --glacier-border-opacity: 0.2;
+  --glacier-shadow-opacity: 0.1;
+  
+  /* Effects */
+  --glacier-refraction: 0;
+  --glacier-fresnel: 0.2;
+  --glacier-glare: 0.1;
+  --glacier-glare-angle: 135deg;
+  --glacier-dispersion: 0;
+  
+  /* Animation */
+  --glacier-transition: 0.3s ease;
+  
+  /* Colors */
+  --glacier-tint-white: rgba(255, 255, 255, var(--glacier-tint-opacity));
+  --glacier-tint-black: rgba(0, 0, 0, var(--glacier-tint-opacity));
+  --glacier-tint-primary: rgba(59, 130, 246, var(--glacier-tint-opacity));
+  --glacier-tint-secondary: rgba(147, 51, 234, var(--glacier-tint-opacity));
+}
+
+/* ================================================
+   KEYFRAME ANIMATIONS
+   ================================================ */
+
+@keyframes glacier-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes glacier-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes glacier-glow-pulse {
+  0%, 100% { 
+    box-shadow: 
+      0 0 20px rgba(255, 255, 255, 0.1),
+      0 4px 30px rgba(0, 0, 0, 0.1);
+  }
+  50% { 
+    box-shadow: 
+      0 0 40px rgba(255, 255, 255, 0.2),
+      0 4px 30px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@keyframes glacier-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes glacier-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes glacier-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glacier-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glacier-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes glacier-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ================================================
+   ANIMATION UTILITIES
+   ================================================ */
+
+.glacier-animate-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.glacier-animate-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.15),
+    transparent
+  );
+  animation: glacier-shimmer 2.5s infinite;
+}
+
+.glacier-animate-pulse {
+  animation: glacier-pulse 2s ease-in-out infinite;
+}
+
+.glacier-animate-glow {
+  animation: glacier-glow-pulse 3s ease-in-out infinite;
+}
+
+.glacier-animate-float {
+  animation: glacier-float 4s ease-in-out infinite;
+}
+
+.glacier-animate-slide-up {
+  animation: glacier-slide-up 0.3s ease-out;
+}
+
+.glacier-animate-slide-down {
+  animation: glacier-slide-down 0.3s ease-out;
+}
+
+.glacier-animate-fade-in {
+  animation: glacier-fade-in 0.3s ease-out;
+}
+
+.glacier-animate-scale-in {
+  animation: glacier-scale-in 0.3s ease-out;
+}
+
+/* ================================================
+   DARK MODE VARIANTS
+   ================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --glacier-tint-opacity: 0.08;
+    --glacier-border-opacity: 0.15;
+    --glacier-shadow-opacity: 0.2;
+  }
+}
+
+.dark {
+  --glacier-tint-opacity: 0.08;
+  --glacier-border-opacity: 0.15;
+  --glacier-shadow-opacity: 0.2;
+}
+
+/* ================================================
+   CUSTOM SCROLLBAR
+   ================================================ */
+
+.glacier-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.glacier-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.glacier-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.glacier-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Firefox scrollbar */
+.glacier-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+}
+
+/* ================================================
+   FOCUS RING STYLES
+   ================================================ */
+
+.glacier-focus-ring:focus {
+  outline: none;
+  box-shadow: 
+    0 0 0 2px rgba(255, 255, 255, 0.1),
+    0 0 0 4px rgba(255, 255, 255, 0.2);
+}
+
+.glacier-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 
+    0 0 0 2px rgba(255, 255, 255, 0.1),
+    0 0 0 4px rgba(59, 130, 246, 0.5);
+}
+
+/* ================================================
+   SELECTION STYLES
+   ================================================ */
+
+.glacier-selection::selection {
+  background: rgba(59, 130, 246, 0.4);
+  color: white;
+}
+
+/* ================================================
+   BACKDROP FILTER FALLBACK
+   ================================================ */
+
+@supports not (backdrop-filter: blur(1px)) {
+  .glacier-glass,
+  .glacier-liquid,
+  .glacier-frosted,
+  .glacier-card,
+  .glacier-panel,
+  .glacier-modal,
+  .glacier-window,
+  .glacier-notification {
+    background-color: rgba(30, 30, 30, 0.95) !important;
+  }
+}
+
+/* ================================================
+   REDUCED MOTION
+   ================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ================================================
+   UTILITY CLASSES
+   ================================================ */
+
+/* Text on glass */
+.glacier-text {
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.glacier-text-muted {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.glacier-text-subtle {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Glass dividers */
+.glacier-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+}
+
+.glacier-divider-vertical {
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+}
+
+/* Glass gradients */
+.glacier-gradient-light {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+}
+
+.glacier-gradient-dark {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.05) 0%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
+}
+
+/* Inner highlights */
+.glacier-highlight-top {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.glacier-highlight-bottom {
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.glacier-highlight-both {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* ================================================
+   COMPONENT-SPECIFIC STYLES
+   ================================================ */
+
+/* Improved button feedback */
+.glacier-btn-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.glacier-btn-ripple::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
+    rgba(255, 255, 255, 0.3) 0%,
+    transparent 50%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.glacier-btn-ripple:active::after {
+  opacity: 1;
+}
+
+/* Checkbox/Radio custom styles */
+.glacier-checkbox-custom {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.glacier-checkbox-custom:checked {
+  background: rgba(59, 130, 246, 0.8);
+  border-color: rgba(59, 130, 246, 1);
+}
+
+.glacier-checkbox-custom:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.glacier-radio-custom {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.glacier-radio-custom:checked {
+  border-color: rgba(59, 130, 246, 1);
+}
+
+.glacier-radio-custom:checked::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.9);
+}
+
+/* Toggle switch */
+.glacier-toggle {
+  appearance: none;
+  width: 48px;
+  height: 24px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.glacier-toggle::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s ease;
+}
+
+.glacier-toggle:checked {
+  background: rgba(59, 130, 246, 0.8);
+  border-color: rgba(59, 130, 246, 1);
+}
+
+.glacier-toggle:checked::after {
+  transform: translateX(24px);
+}
+
+/* Range slider */
+.glacier-range {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.glacier-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.glacier-range::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.glacier-range::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+}
+
+.glacier-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  border: none;
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Progress bar */
+.glacier-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.glacier-progress-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(147, 51, 234, 0.8));
+  transition: width 0.3s ease;
+}
+
+/* Skeleton loading */
+.glacier-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: glacier-shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+}

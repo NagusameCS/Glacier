@@ -1,0 +1,76 @@
+{
+  "name": "glacier-css",
+  "version": "1.0.0",
+  "description": "A comprehensive Tailwind CSS plugin for liquid glass, frosted glass, and glassmorphism effects",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./components": {
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    },
+    "./filters": {
+      "import": "./dist/filters/index.mjs",
+      "require": "./dist/filters/index.js"
+    },
+    "./css": "./dist/glacier.css"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/components/index.ts src/filters/index.ts --format cjs,esm --dts --clean",
+    "build:css": "tailwindcss -i ./src/styles/glacier.css -o ./dist/glacier.css --minify",
+    "build:demo": "cd demo && npm run build",
+    "dev": "cd demo && npm run dev",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "npm run build && npm run build:css",
+    "demo:deploy": "cd demo && npm run build && touch dist/.nojekyll"
+  },
+  "keywords": [
+    "tailwindcss",
+    "tailwind",
+    "plugin",
+    "liquid-glass",
+    "glassmorphism",
+    "frosted-glass",
+    "glass-ui",
+    "apple",
+    "ios",
+    "macos",
+    "visionos",
+    "blur",
+    "refraction",
+    "css",
+    "ui-components"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NagusameCS/Glacier"
+  },
+  "homepage": "https://NagusameCS.github.io/Glacier",
+  "bugs": {
+    "url": "https://github.com/NagusameCS/Glacier/issues"
+  },
+  "peerDependencies": {
+    "tailwindcss": ">=3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "autoprefixer": "^10.4.17",
+    "eslint": "^8.56.0",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3"
+  }
+}
