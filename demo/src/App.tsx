@@ -21,6 +21,8 @@ interface GlassParams {
   liquidWobble: number;
   shapeWidth: number;
   shapeHeight: number;
+  tintColor: string;
+  tintIntensity: number;
 }
 
 interface GlassContextType {
@@ -32,21 +34,36 @@ const GlassContext = createContext<GlassContextType>({
   params: { 
     refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, 
     glare: 0.3, roundness: 0.8, liquidWobble: 0.4,
-    shapeWidth: 0.5, shapeHeight: 0.45
+    shapeWidth: 0.5, shapeHeight: 0.45,
+    tintColor: '#88ccff', tintIntensity: 0.15
   },
   setParams: () => {},
 });
 
 // Glass effect presets
 const GLASS_PRESETS = {
-  crystal: { refraction: 1.8, dispersion: 18, blur: 0, fresnel: 0.8, glare: 0.5, roundness: 0.9, liquidWobble: 0.2 },
-  water: { refraction: 1.33, dispersion: 8, blur: 2, fresnel: 0.4, glare: 0.2, roundness: 0.5, liquidWobble: 0.8 },
-  diamond: { refraction: 2.0, dispersion: 25, blur: 0, fresnel: 1.0, glare: 0.8, roundness: 1.0, liquidWobble: 0.1 },
-  soap: { refraction: 1.4, dispersion: 15, blur: 4, fresnel: 0.6, glare: 0.3, roundness: 0.3, liquidWobble: 0.6 },
-  ice: { refraction: 1.31, dispersion: 5, blur: 6, fresnel: 0.5, glare: 0.4, roundness: 0.7, liquidWobble: 0.15 },
+  crystal: { refraction: 1.8, dispersion: 18, blur: 0, fresnel: 0.8, glare: 0.5, roundness: 0.9, liquidWobble: 0.2, tintColor: '#ffffff', tintIntensity: 0.05 },
+  water: { refraction: 1.33, dispersion: 8, blur: 2, fresnel: 0.4, glare: 0.2, roundness: 0.5, liquidWobble: 0.8, tintColor: '#66ccff', tintIntensity: 0.2 },
+  diamond: { refraction: 2.0, dispersion: 25, blur: 0, fresnel: 1.0, glare: 0.8, roundness: 1.0, liquidWobble: 0.1, tintColor: '#ccddff', tintIntensity: 0.1 },
+  soap: { refraction: 1.4, dispersion: 15, blur: 4, fresnel: 0.6, glare: 0.3, roundness: 0.3, liquidWobble: 0.6, tintColor: '#ffaaee', tintIntensity: 0.15 },
+  ice: { refraction: 1.31, dispersion: 5, blur: 6, fresnel: 0.5, glare: 0.4, roundness: 0.7, liquidWobble: 0.15, tintColor: '#aaeeff', tintIntensity: 0.25 },
 };
 
 const useGlass = () => useContext(GlassContext);
+
+// Helper to convert hex color to [r, g, b, a] for WebGL
+function hexToRgba(hex: string, alpha: number): [number, number, number, number] {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (result) {
+    return [
+      parseInt(result[1], 16) / 255,
+      parseInt(result[2], 16) / 255,
+      parseInt(result[3], 16) / 255,
+      alpha
+    ];
+  }
+  return [1, 1, 1, 0]; // Default to transparent white
+}
 
 // =============================================
 // ANIMATED BACKGROUND - Shows off refraction
@@ -624,6 +641,34 @@ function GlassControls() {
           showValue
         />
       </div>
+
+      {/* Tint Controls */}
+      <div className="mt-6 pt-4 border-t border-white/10">
+        <p className="text-white/50 text-xs mb-3">Glass Tint</p>
+        <div className="flex items-center gap-3 mb-3">
+          <label className="text-white/70 text-xs min-w-[60px]">Color</label>
+          <div className="flex gap-2">
+            {['#ffffff', '#88ccff', '#ff88cc', '#88ffcc', '#ffcc88', '#cc88ff'].map((color) => (
+              <button
+                key={color}
+                onClick={() => setParams({ tintColor: color })}
+                className={`w-6 h-6 rounded-full border-2 transition-all ${
+                  params.tintColor === color ? 'border-white scale-110' : 'border-white/30 hover:border-white/60'
+                }`}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+        </div>
+        <GlassSlider
+          label="Intensity"
+          value={Math.round(params.tintIntensity * 100)}
+          min={0}
+          max={50}
+          onChange={(v) => setParams({ tintIntensity: v / 100 })}
+          showValue
+        />
+      </div>
     </GlassPanel>
   );
 }
@@ -644,6 +689,8 @@ function App() {
     liquidWobble: 0.4,
     shapeWidth: 0.5,
     shapeHeight: 0.45,
+    tintColor: '#88ccff',
+    tintIntensity: 0.15,
   });
 
   // Keyboard shortcuts
@@ -697,6 +744,7 @@ function App() {
             roundness={glassParams.roundness}
             liquidWobble={glassParams.liquidWobble}
             shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
+            tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
             backgroundImage="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80"
             interactive
           />
@@ -775,6 +823,7 @@ function App() {
                           roundness={glassParams.roundness}
                           liquidWobble={glassParams.liquidWobble}
                           shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
+                          tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
                           backgroundImage="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80"
                           interactive
                         />
@@ -823,6 +872,7 @@ function App() {
                           glare={glassParams.glare}
                           roundness={glassParams.roundness}
                           liquidWobble={glassParams.liquidWobble}
+                          tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
                           interactive
                           shapeSize={[0.55, 0.5]}
                         />
