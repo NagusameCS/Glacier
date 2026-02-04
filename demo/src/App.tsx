@@ -88,6 +88,31 @@ function getBackgroundUrl(id: number, size: 'small' | 'medium' | 'large' = 'medi
 // ANIMATED BACKGROUND - Shows off refraction
 // =============================================
 function AnimatedBackground() {
+  // Memoize random positions so they don't change on re-render
+  const stars = useRef(
+    [...Array(30)].map(() => ({
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      opacity: 0.2 + Math.random() * 0.5,
+      delay: `${Math.random() * 5}s`,
+      duration: `${3 + Math.random() * 4}s`,
+    }))
+  ).current;
+
+  const orbs = useRef(
+    [...Array(8)].map((_, i) => ({
+      width: 100 + Math.random() * 150,
+      height: 100 + Math.random() * 150,
+      left: `${10 + (i * 12)}%`,
+      top: `${20 + Math.sin(i) * 30}%`,
+      color: ['rgba(251, 146, 60, 0.3)', 'rgba(168, 85, 247, 0.3)', 'rgba(56, 189, 248, 0.3)', 
+               'rgba(250, 204, 21, 0.3)', 'rgba(52, 211, 153, 0.3)', 'rgba(244, 114, 182, 0.3)',
+               'rgba(96, 165, 250, 0.3)', 'rgba(192, 132, 252, 0.3)'][i],
+      delay: `${-i * 2}s`,
+      duration: `${15 + i * 3}s`,
+    }))
+  ).current;
+
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
       {/* Main gradient base */}
@@ -135,23 +160,19 @@ function AnimatedBackground() {
       />
       
       {/* Smaller animated orbs */}
-      {[...Array(8)].map((_, i) => (
+      {orbs.map((orb, i) => (
         <div
           key={i}
           className="absolute rounded-full animate-float-random"
           style={{
-            width: 100 + Math.random() * 150,
-            height: 100 + Math.random() * 150,
-            left: `${10 + (i * 12)}%`,
-            top: `${20 + Math.sin(i) * 30}%`,
-            background: `radial-gradient(circle, ${
-              ['rgba(251, 146, 60, 0.3)', 'rgba(168, 85, 247, 0.3)', 'rgba(56, 189, 248, 0.3)', 
-               'rgba(250, 204, 21, 0.3)', 'rgba(52, 211, 153, 0.3)', 'rgba(244, 114, 182, 0.3)',
-               'rgba(96, 165, 250, 0.3)', 'rgba(192, 132, 252, 0.3)'][i]
-            } 0%, transparent 70%)`,
+            width: orb.width,
+            height: orb.height,
+            left: orb.left,
+            top: orb.top,
+            background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
             filter: 'blur(20px)',
-            animationDelay: `${-i * 2}s`,
-            animationDuration: `${15 + i * 3}s`,
+            animationDelay: orb.delay,
+            animationDuration: orb.duration,
           }}
         />
       ))}
@@ -174,16 +195,16 @@ function AnimatedBackground() {
       
       {/* Particle field */}
       <div className="absolute inset-0">
-        {[...Array(30)].map((_, i) => (
+        {stars.map((star, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 bg-white rounded-full animate-twinkle"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              opacity: 0.2 + Math.random() * 0.5,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${3 + Math.random() * 4}s`,
+              left: star.left,
+              top: star.top,
+              opacity: star.opacity,
+              animationDelay: star.delay,
+              animationDuration: star.duration,
             }}
           />
         ))}
@@ -432,7 +453,7 @@ function GlassTabs({
 }
 
 // =============================================
-// LIQUID CURSOR - CSS Glass Effect
+// LIQUID CURSOR - Custom pointer cursor with glow
 // =============================================
 function LiquidCursor() {
   const [pos, setPos] = useState({ x: -100, y: -100 });
@@ -469,33 +490,38 @@ function LiquidCursor() {
 
   return (
     <>
-      {/* Main cursor */}
-      <div
+      {/* Pointer cursor shape */}
+      <svg
         className="fixed pointer-events-none z-[9998] transition-transform duration-75"
         style={{
-          left: pos.x - 16,
-          top: pos.y - 16,
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(8px)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
-          transform: `scale(${isClicking ? 0.8 : 1})`,
+          left: pos.x,
+          top: pos.y,
+          width: 24,
+          height: 24,
+          transform: `scale(${isClicking ? 0.85 : 1})`,
+          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
         }}
-      />
-      {/* Trail glow */}
+        viewBox="0 0 24 24"
+        fill="none"
+      >
+        <path
+          d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.85a.5.5 0 0 0-.85.36Z"
+          fill="white"
+          stroke="rgba(99, 102, 241, 0.8)"
+          strokeWidth="1.5"
+        />
+      </svg>
+      {/* Subtle glow */}
       <div
         className="fixed pointer-events-none z-[9997]"
         style={{
-          left: pos.x - 40,
-          top: pos.y - 40,
-          width: 80,
-          height: 80,
+          left: pos.x - 15,
+          top: pos.y - 15,
+          width: 50,
+          height: 50,
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 70%)',
-          filter: 'blur(10px)',
+          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.2), transparent 70%)',
+          filter: 'blur(8px)',
         }}
       />
     </>
