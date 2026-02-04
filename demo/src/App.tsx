@@ -17,23 +17,43 @@ interface GlassParams {
   blur: number;
   fresnel: number;
   glare: number;
+  glareAngle: number;
   roundness: number;
   liquidWobble: number;
   shapeWidth: number;
   shapeHeight: number;
   tintColor: string;
   tintIntensity: number;
+  thickness: number;
   backgroundId: number;
 }
 
-// Background image options
+// Background image options - curated Unsplash photos
 const BACKGROUND_IMAGES = [
   { id: 0, url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80', label: 'Mountains' },
   { id: 1, url: 'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=1200&q=80', label: 'Aurora' },
   { id: 2, url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1200&q=80', label: 'Valley' },
-  { id: 3, url: 'https://images.unsplash.com/photo-1518173946687-a4c036bc613d?w=1200&q=80', label: 'Galaxy' },
-  { id: 4, url: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200&q=80', label: 'Gradient' },
-  { id: 5, url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200&q=80', label: 'Abstract' },
+  { id: 3, url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1200&q=80', label: 'Nebula' },
+  { id: 4, url: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1200&q=80', label: 'Gradient' },
+  { id: 5, url: 'https://images.unsplash.com/photo-1507400492013-162706c8c05e?w=1200&q=80', label: 'Colorful' },
+  { id: 6, url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1200&q=80', label: 'Stars' },
+  { id: 7, url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&q=80', label: 'Earth' },
+  { id: 8, url: 'https://images.unsplash.com/photo-1520034475321-cbe63696469a?w=1200&q=80', label: 'Sunset' },
+  { id: 9, url: 'https://images.unsplash.com/photo-1501436513145-30f24e19fcc8?w=1200&q=80', label: 'Ocean' },
+  { id: 10, url: 'https://images.unsplash.com/photo-1464802686167-b939a6910659?w=1200&q=80', label: 'Galaxy' },
+  { id: 11, url: 'https://images.unsplash.com/photo-1536152470836-b943b246224c?w=1200&q=80', label: 'Clouds' },
+];
+
+// Page background images - random Unsplash nature/abstract photos
+const PAGE_BACKGROUNDS = [
+  'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80', // Stars
+  'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&q=80', // Nebula
+  'https://images.unsplash.com/photo-1464802686167-b939a6910659?w=1920&q=80', // Galaxy
+  'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80', // Earth from space
+  'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1920&q=80', // Purple gradient
+  'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80', // Blue gradient
+  'https://images.unsplash.com/photo-1557682224-5b8590cd9ec5?w=1920&q=80', // Pink gradient
+  'https://images.unsplash.com/photo-1557682260-96773eb01377?w=1920&q=80', // Orange gradient
 ];
 
 interface GlassContextType {
@@ -44,21 +64,21 @@ interface GlassContextType {
 const GlassContext = createContext<GlassContextType>({
   params: { 
     refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, 
-    glare: 0.3, roundness: 0.8, liquidWobble: 0.4,
+    glare: 0.3, glareAngle: 0.8, roundness: 0.8, liquidWobble: 0.4,
     shapeWidth: 0.5, shapeHeight: 0.45,
     tintColor: '#88ccff', tintIntensity: 0.15,
-    backgroundId: 0
+    thickness: 25, backgroundId: 0
   },
   setParams: () => {},
 });
 
 // Glass effect presets
 const GLASS_PRESETS = {
-  crystal: { refraction: 1.8, dispersion: 18, blur: 0, fresnel: 0.8, glare: 0.5, roundness: 0.9, liquidWobble: 0.2, tintColor: '#ffffff', tintIntensity: 0.05 },
-  water: { refraction: 1.33, dispersion: 8, blur: 2, fresnel: 0.4, glare: 0.2, roundness: 0.5, liquidWobble: 0.8, tintColor: '#66ccff', tintIntensity: 0.2 },
-  diamond: { refraction: 2.0, dispersion: 25, blur: 0, fresnel: 1.0, glare: 0.8, roundness: 1.0, liquidWobble: 0.1, tintColor: '#ccddff', tintIntensity: 0.1 },
-  soap: { refraction: 1.4, dispersion: 15, blur: 4, fresnel: 0.6, glare: 0.3, roundness: 0.3, liquidWobble: 0.6, tintColor: '#ffaaee', tintIntensity: 0.15 },
-  ice: { refraction: 1.31, dispersion: 5, blur: 6, fresnel: 0.5, glare: 0.4, roundness: 0.7, liquidWobble: 0.15, tintColor: '#aaeeff', tintIntensity: 0.25 },
+  crystal: { refraction: 1.8, dispersion: 18, blur: 0, fresnel: 0.8, glare: 0.5, glareAngle: 0.8, roundness: 0.9, liquidWobble: 0.2, tintColor: '#ffffff', tintIntensity: 0.05, thickness: 30 },
+  water: { refraction: 1.33, dispersion: 8, blur: 2, fresnel: 0.4, glare: 0.2, glareAngle: 1.2, roundness: 0.5, liquidWobble: 0.8, tintColor: '#66ccff', tintIntensity: 0.2, thickness: 20 },
+  diamond: { refraction: 2.0, dispersion: 25, blur: 0, fresnel: 1.0, glare: 0.8, glareAngle: 0.5, roundness: 1.0, liquidWobble: 0.1, tintColor: '#ccddff', tintIntensity: 0.1, thickness: 35 },
+  soap: { refraction: 1.4, dispersion: 15, blur: 4, fresnel: 0.6, glare: 0.3, glareAngle: 2.0, roundness: 0.3, liquidWobble: 0.6, tintColor: '#ffaaee', tintIntensity: 0.15, thickness: 15 },
+  ice: { refraction: 1.31, dispersion: 5, blur: 6, fresnel: 0.5, glare: 0.4, glareAngle: 1.0, roundness: 0.7, liquidWobble: 0.15, tintColor: '#aaeeff', tintIntensity: 0.25, thickness: 25 },
 };
 
 const useGlass = () => useContext(GlassContext);
@@ -85,9 +105,14 @@ function getBackgroundUrl(id: number, size: 'small' | 'medium' | 'large' = 'medi
 }
 
 // =============================================
-// ANIMATED BACKGROUND - Shows off refraction
+// ANIMATED BACKGROUND - Shows off refraction with random Unsplash
 // =============================================
 function AnimatedBackground() {
+  // Pick a random page background once on mount
+  const backgroundImage = useRef(
+    PAGE_BACKGROUNDS[Math.floor(Math.random() * PAGE_BACKGROUNDS.length)]
+  ).current;
+
   // Memoize random positions so they don't change on re-render
   const stars = useRef(
     [...Array(30)].map(() => ({
@@ -115,15 +140,23 @@ function AnimatedBackground() {
 
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
-      {/* Main gradient base */}
+      {/* Random Unsplash background image */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{
+          backgroundImage: `url(${backgroundImage})`,
+          filter: 'brightness(0.4) saturate(1.2)',
+        }}
+      />
+      {/* Overlay gradient for depth */}
       <div 
         className="absolute inset-0"
         style={{
           background: `
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.3), transparent),
-            radial-gradient(ellipse 60% 40% at 90% 100%, rgba(255, 107, 107, 0.2), transparent),
-            radial-gradient(ellipse 60% 40% at 10% 100%, rgba(79, 172, 254, 0.2), transparent),
-            linear-gradient(to bottom, #0f0c29, #302b63, #24243e)
+            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.4), transparent),
+            radial-gradient(ellipse 60% 40% at 90% 100%, rgba(255, 107, 107, 0.3), transparent),
+            radial-gradient(ellipse 60% 40% at 10% 100%, rgba(79, 172, 254, 0.3), transparent),
+            linear-gradient(to bottom, rgba(15, 12, 41, 0.7), rgba(48, 43, 99, 0.5), rgba(36, 36, 62, 0.7))
           `,
         }}
       />
@@ -588,6 +621,8 @@ function GlassControls() {
       blur: Math.random() * 12,
       fresnel: Math.random(),
       glare: Math.random() * 0.8,
+      glareAngle: Math.random() * 6.28,
+      thickness: 10 + Math.random() * 40,
       roundness: 0.3 + Math.random() * 0.7,
       liquidWobble: Math.random() * 0.8,
       shapeWidth: 0.25 + Math.random() * 0.5,
@@ -696,6 +731,22 @@ function GlassControls() {
           showValue
         />
         <GlassSlider
+          label="Glare Angle"
+          value={Math.round(params.glareAngle * 100)}
+          min={0}
+          max={628}
+          onChange={(v) => setParams({ glareAngle: v / 100 })}
+          showValue
+        />
+        <GlassSlider
+          label="Thickness"
+          value={params.thickness}
+          min={5}
+          max={50}
+          onChange={(v) => setParams({ thickness: v })}
+          showValue
+        />
+        <GlassSlider
           label="Roundness"
           value={Math.round(params.roundness * 100)}
           min={0}
@@ -783,12 +834,14 @@ function App() {
     blur: 0,
     fresnel: 0.6,
     glare: 0.3,
+    glareAngle: 0.8,
     roundness: 0.8,
     liquidWobble: 0.4,
     shapeWidth: 0.5,
     shapeHeight: 0.45,
     tintColor: '#88ccff',
     tintIntensity: 0.15,
+    thickness: 25,
     backgroundId: 0,
   });
 
@@ -840,8 +893,10 @@ function App() {
             blur={glassParams.blur}
             fresnel={glassParams.fresnel}
             glare={glassParams.glare}
+            glareAngle={glassParams.glareAngle}
             roundness={glassParams.roundness}
             liquidWobble={glassParams.liquidWobble}
+            thickness={glassParams.thickness}
             shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
             tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
             backgroundImage={getBackgroundUrl(glassParams.backgroundId, 'large')}
@@ -904,8 +959,10 @@ function App() {
                           blur={glassParams.blur}
                           fresnel={glassParams.fresnel}
                           glare={glassParams.glare}
+                          glareAngle={glassParams.glareAngle}
                           roundness={glassParams.roundness}
                           liquidWobble={glassParams.liquidWobble}
+                          thickness={glassParams.thickness}
                           shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
                           tint={hexToRgba(glassParams.tintColor, glassParams.tintIntensity)}
                           backgroundImage={getBackgroundUrl(glassParams.backgroundId, 'medium')}
