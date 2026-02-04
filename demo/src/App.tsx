@@ -562,48 +562,6 @@ function LiquidCursor() {
 }
 
 // =============================================
-// GLACIER ICON
-// =============================================
-function GlacierIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className={className}>
-      <defs>
-        <linearGradient id="glacierGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{ stopColor: '#60a5fa', stopOpacity: 1 }} />
-          <stop offset="50%" style={{ stopColor: '#a78bfa', stopOpacity: 1 }} />
-          <stop offset="100%" style={{ stopColor: '#38bdf8', stopOpacity: 1 }} />
-        </linearGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-      <polygon 
-        points="50,5 90,30 90,70 50,95 10,70 10,30" 
-        fill="url(#glacierGrad)" 
-        filter="url(#glow)"
-        opacity="0.9"
-      />
-      <polygon 
-        points="50,15 80,35 80,65 50,85 20,65 20,35" 
-        fill="none" 
-        stroke="white" 
-        strokeWidth="1"
-        opacity="0.5"
-      />
-      <polygon 
-        points="50,25 70,40 70,60 50,75 30,60 30,40" 
-        fill="white"
-        opacity="0.3"
-      />
-    </svg>
-  );
-}
-
-// =============================================
 // GLASS CONTROLS - Parameter sliders for WebGL demos
 // =============================================
 function GlassControls() {
