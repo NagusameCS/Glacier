@@ -19,6 +19,8 @@ interface GlassParams {
   glare: number;
   roundness: number;
   liquidWobble: number;
+  shapeWidth: number;
+  shapeHeight: number;
 }
 
 interface GlassContextType {
@@ -27,9 +29,22 @@ interface GlassContextType {
 }
 
 const GlassContext = createContext<GlassContextType>({
-  params: { refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, glare: 0.3, roundness: 0.8, liquidWobble: 0.4 },
+  params: { 
+    refraction: 1.52, dispersion: 12, blur: 0, fresnel: 0.6, 
+    glare: 0.3, roundness: 0.8, liquidWobble: 0.4,
+    shapeWidth: 0.5, shapeHeight: 0.45
+  },
   setParams: () => {},
 });
+
+// Glass effect presets
+const GLASS_PRESETS = {
+  crystal: { refraction: 1.8, dispersion: 18, blur: 0, fresnel: 0.8, glare: 0.5, roundness: 0.9, liquidWobble: 0.2 },
+  water: { refraction: 1.33, dispersion: 8, blur: 2, fresnel: 0.4, glare: 0.2, roundness: 0.5, liquidWobble: 0.8 },
+  diamond: { refraction: 2.0, dispersion: 25, blur: 0, fresnel: 1.0, glare: 0.8, roundness: 1.0, liquidWobble: 0.1 },
+  soap: { refraction: 1.4, dispersion: 15, blur: 4, fresnel: 0.6, glare: 0.3, roundness: 0.3, liquidWobble: 0.6 },
+  ice: { refraction: 1.31, dispersion: 5, blur: 6, fresnel: 0.5, glare: 0.4, roundness: 0.7, liquidWobble: 0.15 },
+};
 
 const useGlass = () => useContext(GlassContext);
 
@@ -499,13 +514,59 @@ function GlacierIcon({ className = '' }: { className?: string }) {
 function GlassControls() {
   const { params, setParams } = useGlass();
   
+  const applyPreset = (presetName: keyof typeof GLASS_PRESETS) => {
+    setParams(GLASS_PRESETS[presetName]);
+  };
+  
   return (
     <GlassPanel className="sticky top-4" borderRadius={24} intensity="heavy">
       <h3 className="text-white font-semibold mb-4 text-lg flex items-center gap-2">
         <span className="text-xl">🎛️</span> Glass Parameters
       </h3>
-      <p className="text-white/50 text-xs mb-6">Adjust the WebGL liquid glass demos</p>
-      <div className="space-y-5">
+      
+      {/* Presets */}
+      <div className="mb-6">
+        <p className="text-white/50 text-xs mb-3">Quick Presets</p>
+        <div className="flex flex-wrap gap-2">
+          {Object.keys(GLASS_PRESETS).map((preset) => (
+            <button
+              key={preset}
+              onClick={() => applyPreset(preset as keyof typeof GLASS_PRESETS)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all capitalize
+                bg-white/10 hover:bg-white/20 text-white/70 hover:text-white
+                border border-white/10 hover:border-white/20"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Shape Controls */}
+      <div className="mb-6 pb-4 border-b border-white/10">
+        <p className="text-white/50 text-xs mb-3">Shape Size</p>
+        <div className="space-y-3">
+          <GlassSlider
+            label="Width"
+            value={Math.round(params.shapeWidth * 100)}
+            min={20}
+            max={80}
+            onChange={(v) => setParams({ shapeWidth: v / 100 })}
+            showValue
+          />
+          <GlassSlider
+            label="Height"
+            value={Math.round(params.shapeHeight * 100)}
+            min={20}
+            max={80}
+            onChange={(v) => setParams({ shapeHeight: v / 100 })}
+            showValue
+          />
+        </div>
+      </div>
+
+      <p className="text-white/50 text-xs mb-4">Fine-tune Parameters</p>
+      <div className="space-y-4">
         <GlassSlider
           label="Refraction"
           value={Math.round(params.refraction * 100)}
@@ -580,6 +641,8 @@ function App() {
     glare: 0.3,
     roundness: 0.8,
     liquidWobble: 0.4,
+    shapeWidth: 0.5,
+    shapeHeight: 0.45,
   });
 
   const contextValue = {
@@ -658,6 +721,7 @@ function App() {
                           glare={glassParams.glare}
                           roundness={glassParams.roundness}
                           liquidWobble={glassParams.liquidWobble}
+                          shapeSize={[glassParams.shapeWidth, glassParams.shapeHeight]}
                           backgroundImage="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80"
                           interactive
                         />
